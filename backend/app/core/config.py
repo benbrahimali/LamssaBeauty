@@ -101,5 +101,36 @@ class Settings(BaseSettings):
     def is_prod(self) -> bool:
         return self.ENV == "prod"
 
+    def assert_production_ready(self) -> None:
+        """Refuse de démarrer en prod avec une configuration de développement.
+
+        Ces valeurs par défaut sont publiques : elles sont dans le dépôt. Un
+        `JWT_SECRET` laissé tel quel permet de forger le jeton de n'importe quel
+        utilisateur, gérant compris. Mieux vaut un démarrage qui échoue bruyamment
+        qu'une API en ligne avec une porte ouverte.
+        """
+        if not self.is_prod:
+            return
+
+        problems: list[str] = []
+        if self.JWT_SECRET == "change-me-in-prod":
+            problems.append(
+                "JWT_SECRET est resté à sa valeur par défaut publique — "
+                "générer : python -c \"import secrets;print(secrets.token_urlsafe(48))\""
+            )
+        if self.PSP_WEBHOOK_SECRET == "change-me":
+            problems.append("PSP_WEBHOOK_SECRET est resté à sa valeur par défaut")
+        if self.SMS_PROVIDER == "console":
+            problems.append(
+                "SMS_PROVIDER=console : aucun OTP ne partirait, personne ne "
+                "pourrait se connecter"
+            )
+        if problems:
+            raise RuntimeError(
+                "Configuration de production incomplète :\n  - "
+                + "\n  - ".join(problems)
+            )
+
 
 settings = Settings()
+settings.assert_production_ready()

@@ -84,3 +84,58 @@ def test_bornes_de_mois_passent_l_annee():
 )
 def test_cle_horaire_du_jour(jour, cle):
     assert day_key(jour) == cle
+
+
+# ── Garde-fous de production ─────────────────────────────────────────────────
+def test_en_dev_les_valeurs_par_defaut_sont_acceptees():
+    """La configuration de dev doit rester utilisable sans rien renseigner."""
+    from app.core.config import Settings
+
+    Settings(ENV="dev").assert_production_ready()  # ne lève pas
+
+
+def test_en_prod_un_secret_jwt_par_defaut_empeche_le_demarrage():
+    """Cette valeur est publique : elle est dans le dépôt.
+
+    La laisser permettrait de forger le jeton de n'importe quel utilisateur,
+    gérant compris. Un démarrage qui échoue vaut mieux qu'une porte ouverte.
+    """
+    from app.core.config import Settings
+
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        Settings(
+            ENV="prod", SMS_PROVIDER="twilio", PSP_WEBHOOK_SECRET="vrai-secret"
+        ).assert_production_ready()
+
+
+def test_en_prod_sans_fournisseur_sms_le_demarrage_est_refuse():
+    """Sans SMS, aucun OTP ne part : personne ne peut se connecter."""
+    from app.core.config import Settings
+
+    with pytest.raises(RuntimeError, match="SMS_PROVIDER"):
+        Settings(
+            ENV="prod", JWT_SECRET="x" * 40, PSP_WEBHOOK_SECRET="vrai-secret"
+        ).assert_production_ready()
+
+
+def test_en_prod_une_configuration_complete_demarre():
+    from app.core.config import Settings
+
+    Settings(
+        ENV="prod",
+        JWT_SECRET="x" * 40,
+        PSP_WEBHOOK_SECRET="vrai-secret",
+        SMS_PROVIDER="twilio",
+    ).assert_production_ready()
+
+
+def test_tous_les_problemes_sont_signales_d_un_coup():
+    """Corriger une variable pour redécouvrir la suivante ferait perdre du temps."""
+    from app.core.config import Settings
+
+    with pytest.raises(RuntimeError) as exc:
+        Settings(ENV="prod").assert_production_ready()
+    message = str(exc.value)
+    assert "JWT_SECRET" in message
+    assert "PSP_WEBHOOK_SECRET" in message
+    assert "SMS_PROVIDER" in message
