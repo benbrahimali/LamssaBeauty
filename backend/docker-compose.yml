@@ -1,0 +1,60 @@
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    env_file: [.env]
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      REDIS_URI: redis://redis:6379/0
+    volumes:
+      - media:/app/media
+      - reports:/app/reports
+      - ./secrets:/app/secrets:ro
+    depends_on:
+      mongo: {condition: service_healthy}
+      redis: {condition: service_healthy}
+
+  worker:
+    build: .
+    command: celery -A app.workers.celery_app.celery_app worker --loglevel=info
+    env_file: [.env]
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      REDIS_URI: redis://redis:6379/0
+    volumes:
+      - reports:/app/reports
+      - ./secrets:/app/secrets:ro   # rappels H-2 : le worker pousse aussi en FCM
+    depends_on: [api]
+
+  beat:
+    build: .
+    command: celery -A app.workers.celery_app.celery_app beat --loglevel=info
+    env_file: [.env]
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      REDIS_URI: redis://redis:6379/0
+    depends_on: [worker]
+
+  mongo:
+    image: mongo:7
+    ports: ["27017:27017"]
+    volumes: [mongo_data:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mongo_data:
+  media:
+  reports:

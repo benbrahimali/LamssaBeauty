@@ -1,0 +1,5 @@
+# Le tag `integration` marque les tests qui exigent un backend démarré.
+#   flutter test --tags integration          -> les exécute (backend requis)
+#   flutter test --exclude-tags integration  -> les ignore (CI sans infra)
+tags:
+  integration: {}

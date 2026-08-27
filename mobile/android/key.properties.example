@@ -1,0 +1,12 @@
+# Copier en key.properties et renseigner. Ne JAMAIS committer le fichier réel.
+#
+# Créer le keystore (une seule fois, à conserver précieusement) :
+#   keytool -genkeypair -v -keystore lamssa-upload.jks -alias lamssa \
+#     -keyalg RSA -keysize 4096 -validity 10950
+#
+# Sans ce fichier, `flutter build apk --release` retombe sur la clé de debug :
+# l'APK s'installe à la main mais le Play Store le refuse.
+storeFile=lamssa-upload.jks
+storePassword=
+keyAlias=lamssa
+keyPassword=

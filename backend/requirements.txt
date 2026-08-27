@@ -1,0 +1,25 @@
+# ── API ──────────────────────────────────────────────────────────────
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9          # uploads (photos salon / portfolio)
+
+# ── Données ──────────────────────────────────────────────────────────
+beanie>=2.0                      # ODM ; s'appuie sur le client async de PyMongo
+pymongo>=4.9
+redis>=5.0                       # verrous de créneaux, OTP, broker Celery
+
+# ── Config & sécurité ────────────────────────────────────────────────
+pydantic>=2.7
+pydantic-settings>=2.2
+PyJWT[crypto]>=2.8               # JWT de session + assertion RS256 pour FCM v1
+
+# ── Intégrations ─────────────────────────────────────────────────────
+anthropic>=0.116                 # Style DNA : analyse vision du selfie
+httpx>=0.27                      # Konnect / Flouci / FCM / SMS
+celery>=5.4                      # rappels, no-shows, rapports
+reportlab>=4.1                   # rapport de clôture PDF
+boto3>=1.34                      # stockage S3 / Cloudflare R2
+
+# ── Tests ────────────────────────────────────────────────────────────
+pytest>=8.2
+pytest-asyncio>=0.23

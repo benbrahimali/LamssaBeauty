@@ -1,0 +1,8 @@
+# Copier en local.properties. Ce fichier n'est pas versionné.
+# sdk.dir et flutter.sdk sont renseignés automatiquement par Flutter.
+#
+# Clé Google Maps (console Google Cloud > API et services > Identifiants).
+# À restreindre au package tn.lamssa.app et à l'empreinte SHA-1 de ta clé de
+# signature, sinon n'importe qui peut l'utiliser à tes frais.
+# Sans elle, la carte de l'écran « Explorer » reste grise ; le reste tourne.
+MAPS_API_KEY=

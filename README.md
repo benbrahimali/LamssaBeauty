@@ -1,0 +1,235 @@
+# LAMSSA
+
+> Plateforme de réservation & gestion de salons de coiffure et beauté — Tunisie.
+> Monorepo : API FastAPI + application mobile Flutter.
+
+Implémentation du cahier des charges `LAMSSA-cahier-des-charges.md` (v1.0).
+
+```text
+lamssa/
+├── backend/     API FastAPI + MongoDB + Redis + Celery   ← §4.3, §6
+├── mobile/      Application Flutter (client + pro)        ← §4.1
+└── _archive/    Squelette initial conservé pour référence (non versionné)
+```
+
+---
+
+## Démarrage rapide
+
+### Backend
+
+```bash
+cd backend
+cp .env.example .env
+docker compose up -d          # api + worker + beat + mongo + redis
+docker compose exec api python -m app.seed    # jeu de données de démo
+```
+
+Sans Docker :
+
+```bash
+cd backend
+python -m venv .venv && .venv/Scripts/activate      # Windows
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+- Documentation interactive : <http://localhost:8000/docs>
+- Sonde : <http://localhost:8000/health>
+- En dev, le code OTP est renvoyé dans la réponse de `/auth/otp/request` et `000000` est
+  accepté partout (`OTP_DEV_CODE`, ignoré dès `ENV=prod`).
+
+### Mobile
+
+```bash
+cd mobile
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000   # émulateur Android
+flutter run --dart-define=API_BASE_URL=http://192.168.1.20:8000  # téléphone réel
+```
+
+Sans `--dart-define`, l'app choisit seule : `10.0.2.2:8000` sur Android (l'hôte vu
+depuis l'émulateur), `localhost:8000` ailleurs. En dev, l'écran de connexion
+pré-remplit le code OTP renvoyé par l'API et le code `000000` fonctionne toujours.
+
+---
+
+## Couverture du cahier des charges
+
+| § | Module | État | Où |
+|---|---|---|---|
+| 3.1 | Auth OTP SMS, 3 rôles, onboarding salon | ✅ | `api/v1/auth.py`, `api/v1/salons.py` |
+| 3.2 | Recherche géo 2dsphere, fiche salon, profil coiffeur | ✅ | `api/v1/salons.py`, `api/v1/staff.py` |
+| 3.3 | Créneaux, multi-services, verrou anti-conflit, walk-in, annulation | ✅ | `services/availability.py`, `services/booking_service.py` |
+| 3.4 | Caisse, split configurable, tséb9a, clôture, dépenses, P&L | ✅ | `services/cash_service.py`, `services/split_engine.py`, `api/v1/advances.py` |
+| 3.5 | Équipe, chaises, commissions, congés, classement | ✅ | `api/v1/salons.py` |
+| 3.6 | Paiement Konnect/Flouci, webhook, remboursement, commission | ✅ | `services/payment_service.py`, `api/v1/payments.py` |
+| 3.7 | Push FCM + SMS, historique in-app | ✅ | `services/notification_service.py`, `api/v1/notifications.py` |
+| 3.8 | Avis vérifiés, portfolio, fil « En vogue » | ✅ | `api/v1/reviews.py`, `api/v1/portfolio.py` |
+| 5.5 | Machine à états du RDV | ✅ | `models/enums.py` (`BOOKING_TRANSITIONS`) |
+| 2.4 / 8.5 | Style DNA — analyse du selfie par modèle vision | ✅ | `services/style_dna_service.py`, `api/v1/style_dna.py` |
+| 2.4 | Liste d'attente, programme fidélité | ❌ V2 | — |
+
+### Partage par QR (§3.2, §8.3)
+
+Chaque salon a un **code public court** (`BARBIE GV28`) que le gérant imprime en
+QR pour sa vitrine ou envoie sur WhatsApp — l'app partage le QR **en image**,
+pas seulement un lien. Le client arrive sur la fiche : services, prix, équipe,
+prise de RDV.
+
+Le code est lu par des caméras mais aussi par des humains. Le suffixe aléatoire
+exclut donc `0/O` et `1/I/L`, et le préfixe reprend le nom du salon pour rester
+reconnaissable une fois collé dans une conversation. La saisie manuelle tolère
+casse, espaces et tirets — `GET /salons/code/{code}` est **public**, comme la
+fiche salon, sinon un QR n'aurait aucun intérêt.
+
+L'unicité vient d'un index Mongo `partial` sur `public_code`, pas d'un
+`find_one` préalable : deux créations simultanées passeraient toutes deux la
+vérification. `public_code.assign()` réessaie sur collision.
+
+Le QR encode `PUBLIC_WEB_BASE/s/{code}` — une URL https, ouvrable par n'importe
+quel appareil photo. **Tant qu'aucun domaine n'est publié, un client sans l'app
+tombe sur une page inexistante** : c'est le seul maillon du partage qui dépend
+d'une infra externe.
+
+### Notifications push
+
+Le §3.7 classe les push en *Must*. L'implémentation utilise **FCM HTTP v1** :
+l'API legacy (`POST /fcm/send` avec `Authorization: key=…`) a été fermée par
+Google le **22/07/2024** et aucune « server key » n'est plus délivrée. On
+s'authentifie donc avec le **compte de service** du projet Firebase, dont
+l'assertion JWT RS256 est échangée contre un jeton OAuth2 mis en cache
+(`services/fcm.py`).
+
+L'API v1 n'accepte qu'un destinataire par requête — il n'y a pas d'équivalent
+REST à `registration_ids` — donc les envois sont parallélisés, et les tokens que
+FCM déclare définitivement morts (`UNREGISTERED`, `SENDER_ID_MISMATCH`) sont
+retirés du compte. Une panne passagère (`UNAVAILABLE`) ne purge rien : sinon un
+incident FCM rendrait les utilisateurs injoignables pour de bon.
+
+Deux fichiers, jamais versionnés (voir `.gitignore`) :
+
+| Fichier | Rôle |
+|---|---|
+| `mobile/android/app/google-services.json` | identifie l'app Android ; son `package_name` doit être identique à `applicationId` (`tn.lamssa.app`) |
+| `backend/secrets/firebase-admin.json` | compte de service ; permet d'envoyer une notification à **tout** utilisateur — ne quitte jamais le serveur |
+
+Sans `FCM_CREDENTIALS_FILE`, les push sont loggés en console et le reste de
+l'API fonctionne à l'identique.
+
+### Style DNA
+
+Le selfie est analysé par **Claude Opus 5** (`claude-opus-5`, vision), appelé
+**depuis le backend** : une clé d'API embarquée dans l'APK serait extractible en
+quelques minutes. L'image transite en mémoire, n'est ni écrite sur disque ni
+journalisée — l'écran promet « الصورة ما تتحفظش » et le code tient la promesse.
+
+La réponse est contrainte par un JSON Schema (structured outputs), donc l'app
+reçoit toujours la même forme : forme du visage, confiance, analyse en arabe
+tunisien, 3 à 5 coupes classées, et ce qu'il faut éviter. Le modèle peut
+répondre « pas de visage détecté » — l'écran l'affiche alors tel quel au lieu
+d'inventer un résultat.
+
+Sans `ANTHROPIC_API_KEY`, `GET /style-dna/status` renvoie `available: false` et
+l'accueil masque la carte : le reste de l'app fonctionne à l'identique.
+
+### Règles métier appliquées
+
+- **Cloisonnement des rôles** : un `STAFF` sur `/cash/today` reçoit `403` ; sur
+  `/cash/me` il ne voit que ses propres transactions. Un `OWNER` n'accède qu'à ses salons.
+- **Split** : la commission appliquée est toujours celle du coiffeur qui a *exécuté* le
+  RDV, même si le gérant encaisse depuis son téléphone. Le pourboire ne rentre jamais
+  dans le split (100 % employé).
+- **Anti-double-réservation** : verrou Redis `SETNX` (TTL 30 s) + re-vérification du
+  chevauchement en base à l'intérieur du verrou. Un conflit renvoie `409` avec des
+  créneaux alternatifs.
+- **Clôture** : idempotente (index unique `salon_id + day`), verrouille les transactions
+  du jour, déduit les tséb9as approuvées et les passe en `settled`.
+- **Fuseau** : tout est stocké en UTC, tout le raisonnement métier se fait en heure locale
+  `Africa/Tunis` — la « caisse du jour » ne dérive donc pas à minuit.
+
+---
+
+## Tests
+
+```bash
+cd backend
+python -m pytest -q          # 168 tests unitaires, sans MongoDB ni Redis
+python -m tests.smoke_e2e    # 51 assertions bout en bout (mongo + redis requis)
+
+cd ../mobile
+flutter analyze                                  # 0 issue
+flutter test --exclude-tags integration          # 37 tests unitaires
+flutter test --tags integration \
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000   # 39 tests contre l'API réelle
+```
+
+Le cœur métier (split, créneaux, transitions, agrégation de caisse, normalisation
+téléphone) est écrit en fonctions pures : la suite unitaire tourne hors infrastructure,
+donc en CI sans conteneurs. Le smoke test, lui, déroule le parcours complet
+réservation → paiement → encaissement → tséb9a → clôture → avis contre de vraies bases.
+Côté mobile, les tests d'intégration valident ce que l'analyse statique ne voit pas :
+que le JSON réel de FastAPI se désérialise bien dans les modèles de l'app.
+
+---
+
+## Architecture mobile
+
+```text
+mobile/lib/
+├── core/          env, client HTTP (JWT + refresh transparent), erreurs, stockage tokens
+├── data/
+│   ├── models.dart      modèles + désérialisation du JSON de l'API
+│   └── repositories/    auth, salons, bookings, cash, notifications
+├── state/         contrôleurs Provider (auth, salons, booking, cash, notifications)
+├── screens/       écrans, alimentés uniquement par les contrôleurs
+└── widgets/       design system + états async (chargement / erreur / vide)
+```
+
+Aucune donnée n'est simulée : `mock_data.dart` a été supprimé. Chaque écran affiche un
+état de chargement, une erreur réessayable ou un état vide explicite.
+
+L'app couvre les trois rôles de bout en bout : le client cherche, réserve, suit et
+annule ses RDV puis dépose un avis ; le coiffeur consulte son agenda, sa caisse et
+demande une tséb9a ; le gérant ouvre son salon depuis le téléphone
+(`create_salon_screen.dart`), saisit son catalogue et son équipe
+(`manage_salon_screen.dart`), encaisse, saisit un walk-in et clôture sa journée.
+La création d'un salon promeut le compte en `OWNER` côté serveur — l'app rafraîchit
+donc son contexte d'authentification juste après.
+
+## Reste à faire
+
+Toutes les fonctionnalités du cahier des charges prévues pour la V1 sont
+implémentées et testées. Ce qui suit ne dépend plus du code.
+
+### Ce qui dépend de comptes externes
+
+1. **Domaine `lamssa.tn`** — le QR encode `PUBLIC_WEB_BASE/s/{code}`. Un client
+   qui n'a pas l'app tombe pour l'instant sur une page inexistante. Acheter le
+   domaine et y servir une page de repli (fiche salon + lien de téléchargement)
+   est ce qui rend le partage viral.
+2. **Clés PSP réelles** — `PSP_PROVIDER=mock` par défaut ; passer à `konnect`
+   ou `flouci` et vérifier le format des webhooks en préprod.
+3. **`ANTHROPIC_API_KEY`** — Style DNA n'a jamais tourné contre le modèle réel,
+   faute de clé sur la machine de développement. Le reste de l'app fonctionne
+   sans, la carte est simplement masquée.
+4. **`GEMINI_API_KEY`** — même chose pour l'illustration de coupe et l'essayage.
+   La logique (consentement, cache, extraction de l'image) est testée, mais
+   aucun appel n'a été passé au fournisseur.
+5. **APNs** — le push iOS demande un compte Apple Developer payant. Android est
+   opérationnel.
+
+### Vérifications qu'aucun test ne remplace
+
+6. **Push sur un vrai téléphone** — la chaîne FCM v1 est validée jusqu'aux
+   serveurs Google (jeton OAuth2 obtenu, token mort correctement purgé), mais
+   aucune notification n'a encore été reçue sur un appareil.
+7. **Relecture visuelle en RTL** — l'interface est passée en base droite-à-gauche
+   (elle était rendue en LTR alors qu'elle est rédigée en arabe tunisien). Les
+   écrans construits avant ce changement méritent un coup d'œil sur téléphone :
+   `flutter analyze` ne voit pas un alignement inversé.
+
+### V2 (§2.4)
+
+8. **Liste d'attente** et **programme de fidélité** — explicitement hors V1 dans
+   le cahier des charges.

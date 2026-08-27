@@ -1,0 +1,77 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Divers
+# ─────────────────────────────────────────────────────────────────────────────
+*.class
+*.log
+*.swp
+.DS_Store
+.atom/
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Historique local des extensions VS Code
+.history/
+.lh/
+.sixth/
+
+# IDE
+*.iml
+*.ipr
+*.iws
+.idea/
+#.vscode/
+
+# Squelette dupliqué conservé pour référence, hors versionnement
+_archive/
+
+# ─────────────────────────────────────────────────────────────────────────────
+# mobile/ — Flutter / Dart
+# ─────────────────────────────────────────────────────────────────────────────
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+mobile/build/
+mobile/coverage/
+app.*.symbols
+app.*.map.json
+mobile/android/app/debug
+mobile/android/app/profile
+mobile/android/app/release
+mobile/android/.gradle/
+mobile/android/local.properties   # contient MAPS_API_KEY
+
+# ─────────────────────────────────────────────────────────────────────────────
+# backend/ — Python / FastAPI
+# ─────────────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Secrets & données locales — ne JAMAIS committer
+.env
+backend/.env
+backend/media/
+backend/reports/
+
+# Signature Android — perdre ce keystore rend TOUTE mise à jour de l'app
+# impossible sur le Play Store ; le committer laisse n'importe qui publier
+# une mise à jour au nom de LAMSSA. À sauvegarder hors du dépôt.
+mobile/android/key.properties
+*.jks
+*.keystore
+
+# Firebase — le compte de service peut pousser des notifications à TOUS les
+# utilisateurs au nom de l'app : il ne quitte jamais la machine.
+backend/secrets/
+mobile/android/app/google-services.json
+mobile/ios/Runner/GoogleService-Info.plist
+mobile/lib/firebase_options.dart
