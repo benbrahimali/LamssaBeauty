@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
@@ -11,13 +13,17 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _logoFade;
   late Animation<Offset> _logoSlide;
   late Animation<double> _subFade;
   late Animation<double> _btnFade;
   bool _showBtn = false;
+
+  /// Respiration des anneaux : un cycle lent et continu, indépendant de
+  /// l'animation d'entrée qui, elle, se joue une seule fois.
+  late AnimationController _pulseCtrl;
 
   @override
   void initState() {
@@ -30,6 +36,13 @@ class _SplashScreenState extends State<SplashScreen>
     _subFade   = CurvedAnimation(parent: _ctrl, curve: const Interval(0.3, 0.65, curve: Curves.easeOut));
     _btnFade   = CurvedAnimation(parent: _ctrl, curve: const Interval(0.65, 1.0, curve: Curves.easeOut));
 
+    // 3,2 s par cycle : le rythme d'une respiration calme. Plus rapide,
+    // l'écran devient nerveux au lieu d'être accueillant.
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3200),
+    );
+
     _ctrl.forward();
     _ctrl.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
@@ -39,8 +52,26 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // « Réduire les animations » est un réglage d'accessibilité, pas une
+    // préférence esthétique : certains utilisateurs ont des vertiges avec le
+    // mouvement. On fige alors les anneaux à leur état de repos.
+    final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (reduceMotion) {
+      _pulseCtrl.stop();
+      _pulseCtrl.value = 0;
+    } else if (!_pulseCtrl.isAnimating) {
+      // `repeat()` sans `reverse` : la sinusoïde redescend d'elle-même et se
+      // referme sur elle-même, donc aucune rupture à la boucle.
+      _pulseCtrl.repeat();
+    }
+  }
+
+  @override
   void dispose() {
     _ctrl.dispose();
+    _pulseCtrl.dispose();
     super.dispose();
   }
 
@@ -61,22 +92,32 @@ class _SplashScreenState extends State<SplashScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Decorative rings
+              // Anneaux décoratifs — ils respirent, le halo suit.
               Stack(
                 alignment: Alignment.center,
                 children: [
-                  Container(
-                    width: 280, height: 280,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.gold.withValues(alpha: 0.08), width: 1),
-                    ),
-                  ),
-                  Container(
-                    width: 200, height: 200,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.gold.withValues(alpha: 0.12), width: 1),
+                  // Isolé du reste de l'arbre : seul ce sous-arbre se repeint
+                  // à chaque image, pas le logo ni le bouton.
+                  RepaintBoundary(
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        _Halo(controller: _pulseCtrl),
+                        // L'anneau extérieur culmine après l'intérieur : c'est
+                        // ce retard qui fait lire une onde partant du logo,
+                        // plutôt que deux cercles qui zooment ensemble.
+                        _BreathingRing(
+                          controller: _pulseCtrl,
+                          phase: -0.09,
+                          size: 280,
+                          restOpacity: 0.08,
+                        ),
+                        _BreathingRing(
+                          controller: _pulseCtrl,
+                          size: 200,
+                          restOpacity: 0.12,
+                        ),
+                      ],
                     ),
                   ),
                   Column(
@@ -87,17 +128,30 @@ class _SplashScreenState extends State<SplashScreen>
                         opacity: _logoFade,
                         child: SlideTransition(
                           position: _logoSlide,
-                          child: Text(
-                            'LAMSSA',
-                            style: GoogleFonts.playfairDisplay(
-                              fontSize: 72,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.gold,
-                              letterSpacing: -2,
-                              shadows: [
-                                Shadow(color: AppColors.gold.withValues(alpha: 0.4), blurRadius: 40),
-                              ],
-                            ),
+                          child: AnimatedBuilder(
+                            animation: _pulseCtrl,
+                            builder: (context, _) {
+                              final t = _breath(_pulseCtrl.value);
+                              return Text(
+                                'LAMSSA',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 72,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppColors.gold,
+                                  letterSpacing: -2,
+                                  // Le lettrage ne change jamais de taille :
+                                  // du texte mis à l'échelle devient flou. Seule
+                                  // sa lueur s'intensifie avec la respiration.
+                                  shadows: [
+                                    Shadow(
+                                      color: AppColors.gold
+                                          .withValues(alpha: 0.28 + 0.22 * t),
+                                      blurRadius: 34 + 18 * t,
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -187,6 +241,106 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Respiration : 0 → 1 → 0 sur un cycle, sans à-coup à la boucle.
+///
+/// Un `Interval` sur un contrôleur en aller-retour retardait le *départ* de
+/// l'anneau extérieur mais le faisait culminer en même temps que l'intérieur :
+/// un zoom retardé, pas une onde. Une phase sur une sinusoïde décale réellement
+/// le sommet, et la fonction se referme sur elle-même — aucun saut au bouclage.
+double _breath(double t, {double phase = 0}) =>
+    0.5 - 0.5 * math.cos(2 * math.pi * (t + phase));
+
+/// Un anneau qui respire : il grandit un peu, et sa lumière monte avec lui.
+///
+/// L'amplitude est volontairement faible. Au-delà de ~6 %, l'œil ne lit plus
+/// une respiration mais un rebond, et un écran d'accueil qui rebondit fait
+/// bon marché.
+class _BreathingRing extends StatelessWidget {
+  const _BreathingRing({
+    required this.controller,
+    required this.size,
+    required this.restOpacity,
+    this.phase = 0,
+  });
+
+  final AnimationController controller;
+  final double size;
+
+  /// Décalage dans le cycle, en fraction de tour. Négatif = culmine plus tard.
+  final double phase;
+
+  /// Opacité du trait au repos, quand l'anneau est à son plus petit.
+  final double restOpacity;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final t = _breath(controller.value, phase: phase);
+        return Transform.scale(
+          // Repère stable pour les tests : Material insère ses propres
+          // Transform dans l'arbre, impossible de distinguer les anneaux sans.
+          key: ValueKey('splash-ring-${size.toInt()}'),
+          scale: 1 + 0.055 * t,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                // Le trait s'éclaircit en même temps qu'il s'élargit : c'est ce
+                // couplage qui donne l'impression d'une lumière qui enfle,
+                // plutôt que d'un cercle qu'on redimensionne.
+                color: AppColors.gold.withValues(alpha: restOpacity * (1 + 1.6 * t)),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.gold.withValues(alpha: 0.10 * t),
+                  blurRadius: 8 + 26 * t,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Halo diffus derrière le logo. Il ne dessine aucun contour : il ne fait que
+/// réchauffer le fond au moment où les anneaux s'ouvrent.
+class _Halo extends StatelessWidget {
+  const _Halo({required this.controller});
+
+  final AnimationController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final t = _breath(controller.value);
+        return Container(
+          width: 300,
+          height: 300,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                AppColors.gold.withValues(alpha: 0.06 + 0.06 * t),
+                AppColors.gold.withValues(alpha: 0.0),
+              ],
+              stops: const [0.0, 1.0],
+            ),
+          ),
+        );
+      },
     );
   }
 }

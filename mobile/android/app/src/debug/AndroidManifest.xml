@@ -4,4 +4,13 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Depuis Android 9, le HTTP en clair est refusé par défaut. En debug on
+         parle à l'API sur le réseau local (http://192.168.x.x:8000), sans TLS :
+         sans cette exception, toutes les requêtes échouent en « connexion
+         impossible », sans indice sur la cause.
+
+         Volontairement limité au manifeste `debug` : la version publiée reste
+         soumise à la règle, elle devra parler en HTTPS. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>
