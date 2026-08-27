@@ -246,18 +246,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildNearbySalons(SalonsController salons) {
     if (salons.loading && salons.salons.isEmpty) {
-      return const SizedBox(height: 210, child: AppLoader());
+      return SizedBox(
+        height: SalonCard.heightIn(context),
+        child: const AppLoader(),
+      );
     }
     if (salons.error != null && salons.salons.isEmpty) {
       return SizedBox(
-        height: 210,
+        height: SalonCard.heightIn(context),
         child: AppError(message: salons.error!, onRetry: salons.refresh),
       );
     }
     if (salons.salons.isEmpty) {
-      return const SizedBox(
-        height: 210,
-        child: AppEmpty(
+      return SizedBox(
+        height: SalonCard.heightIn(context),
+        child: const AppEmpty(
           emoji: '🔍',
           title: 'Aucun salon trouvé',
           subtitle: 'Change de filtre ou élargis ta recherche.',
@@ -266,7 +269,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return SizedBox(
-      height: 210,
+      height: SalonCard.heightIn(context),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -276,7 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final salon = salons.salons[i];
           return GestureDetector(
             onTap: () => widget.onGoSalon(salon),
-            child: _SalonCard(salon: salon),
+            child: SalonCard(salon: salon),
           );
         },
       ),
@@ -285,7 +288,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCoiffeurs(List<Coiffeur> coiffeurs) {
     return SizedBox(
-      height: 160,
+      height: CoiffeurCard.heightIn(context),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -295,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final coiffeur = coiffeurs[i];
           return GestureDetector(
             onTap: () => widget.onGoCoiffeur(coiffeur),
-            child: _CoiffeurCard(coiffeur: coiffeur),
+            child: CoiffeurCard(coiffeur: coiffeur),
           );
         },
       ),
@@ -424,9 +427,30 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // ── Sub-widgets ───────────────────────────────────────────────────
-class _SalonCard extends StatelessWidget {
+/// Carte salon des listes horizontales de l'accueil.
+class SalonCard extends StatelessWidget {
   final Salon salon;
-  const _SalonCard({required this.salon});
+  const SalonCard({super.key, required this.salon});
+
+  /// Hauteur du visuel en tête de carte — la seule partie qui ne bouge pas.
+  static const imageHeight = 130.0;
+
+  /// Hauteur à réserver dans la liste.
+  ///
+  /// Elle était figée à 210 px : les cartes affichant un prix débordaient de
+  /// 15 px, et n'importe quel agrandissement de la police système cassait les
+  /// autres. Le bloc texte suit donc le réglage d'accessibilité de l'appareil.
+  static double heightIn(BuildContext context) {
+    const padding = 28.0;      // EdgeInsets.all(14), haut et bas
+    // Nom + note + prix. Mesuré à 52 px avec les polices de test ; on réserve
+    // plus, car DM Sans rendu sur l'appareil est plus haut que la police de
+    // substitution des tests — c'est précisément cet écart qui a produit les
+    // 15 px de débordement.
+    const textBlock = 72.0;
+    return imageHeight +
+        padding +
+        MediaQuery.textScalerOf(context).scale(textBlock);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -440,7 +464,7 @@ class _SalonCard extends StatelessWidget {
       clipBehavior: Clip.hardEdge,
       child: Column(children: [
         Container(
-          height: 130,
+          height: imageHeight,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [salon.color, salon.accent.withValues(alpha: 0.13)],
@@ -507,9 +531,23 @@ class _SalonCard extends StatelessWidget {
   }
 }
 
-class _CoiffeurCard extends StatelessWidget {
+/// Carte coiffeur des listes horizontales de l'accueil.
+class CoiffeurCard extends StatelessWidget {
   final Coiffeur coiffeur;
-  const _CoiffeurCard({required this.coiffeur});
+  const CoiffeurCard({super.key, required this.coiffeur});
+
+  static const avatarSize = 56.0;
+
+  /// Même raison que pour [SalonCard.heightIn] : trois lignes de texte sous
+  /// l'avatar, dont la hauteur dépend du réglage système.
+  static double heightIn(BuildContext context) {
+    const padding = 32.0;      // symmetric(vertical: 16)
+    // Prénom + rôle + note : 59 px mesurés, arrondis pour la même raison.
+    const textBlock = 64.0;
+    return avatarSize +
+        padding +
+        MediaQuery.textScalerOf(context).scale(textBlock);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -525,7 +563,7 @@ class _CoiffeurCard extends StatelessWidget {
         InitialsAvatar(
           initials: coiffeur.initials,
           color: coiffeur.color,
-          size: 56,
+          size: avatarSize,
           showBadge: true,
           available: coiffeur.available,
         ),
