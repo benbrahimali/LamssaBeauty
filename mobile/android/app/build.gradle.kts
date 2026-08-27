@@ -27,7 +27,7 @@ val localFile = rootProject.file("local.properties")
 if (localFile.exists()) {
     localFile.inputStream().use { localProperties.load(it) }
 }
-val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY") ?: ""
+val mapsApiKey: String = localProperties.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
 
 
 android {
@@ -51,7 +51,7 @@ android {
         // sinon FCM n'atteindra jamais l'appareil — et sans erreur explicite.
         applicationId = "tn.lamssa.app"
         // Sans clé locale, la carte reste grise : le reste de l'app tourne.
-        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = mapsApiKey
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

@@ -5,4 +5,4 @@
 # À restreindre au package tn.lamssa.app et à l'empreinte SHA-1 de ta clé de
 # signature, sinon n'importe qui peut l'utiliser à tes frais.
 # Sans elle, la carte de l'écran « Explorer » reste grise ; le reste tourne.
-MAPS_API_KEY=
+GOOGLE_MAPS_API_KEY=
