@@ -74,6 +74,9 @@ def test_journee_vide():
         "salon_total": 0,
         "staff_total": 0,
         "tips_total": 0,
+        # Pourboires gardés par le salon : nuls tant qu'il les laisse à
+        # l'équipe, ce qui est le réglage par défaut.
+        "salon_tips_total": 0,
         "by_method": {},
         "by_staff": {},
     }

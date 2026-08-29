@@ -43,6 +43,11 @@ def _aggregate(transactions: list[Transaction]) -> dict:
         "salon_total": round(sum(t.salon_share for t in transactions), 2),
         "staff_total": round(sum(t.staff_share for t in transactions), 2),
         "tips_total": round(sum(t.tip for t in transactions), 2),
+        # Pourboires gardés par le salon : nuls tant qu'il les laisse à
+        # l'équipe, ce qui reste le cas par défaut.
+        "salon_tips_total": round(
+            sum(getattr(t, "salon_tip", 0.0) for t in transactions), 2
+        ),
         "by_method": dict(by_method),
         "by_staff": dict(by_staff),
     }
@@ -294,7 +299,10 @@ async def profit_and_loss(
     revenus = round(sum(t.amount for t in txs), 2)
     part_equipe = round(sum(t.staff_share for t in txs), 2)
     pourboires = round(sum(t.tip for t in txs), 2)
-    marge = round(revenus - part_equipe, 2)
+    # Un salon qui met les pourboires en commun les encaisse réellement : les
+    # ignorer sous-estimerait son résultat.
+    pourboires_salon = round(sum(getattr(t, "salon_tip", 0.0) for t in txs), 2)
+    marge = round(revenus - part_equipe + pourboires_salon, 2)
 
     par_categorie: dict[str, float] = {}
     for e in expenses:
@@ -335,6 +343,7 @@ async def profit_and_loss(
         # 10 000 de chiffre n'a rien à voir avec 500 sur 1 500.
         "margin_pct": round(100 * resultat / revenus, 1) if revenus else 0.0,
         "tips_collected": pourboires,
+        "salon_tips": pourboires_salon,
         "by_category": dict(sorted(par_categorie.items(), key=lambda kv: -kv[1])),
         "charges": lignes_charges,
         "transaction_count": len(txs),
@@ -393,6 +402,10 @@ async def pilot(
         "break_even_reached": seuil is not None and revenus >= seuil,
         "missing_to_break_even": round(max(seuil - revenus, 0), 2) if seuil else None,
         "staff_ratio": round(part_equipe * 100, 1),
+        # Règles de rémunération en vigueur : l'app les affiche et les édite
+        # depuis le même écran que le résultat, puisqu'elles le déterminent.
+        "tip_staff_pct": getattr(salon, "tip_staff_pct", 100.0),
+        "default_split_pct": salon.default_split_pct,
         "target": objectif or None,
         "target_progress_pct": round(100 * revenus / objectif, 1) if objectif else None,
         "projected_revenue": projection,

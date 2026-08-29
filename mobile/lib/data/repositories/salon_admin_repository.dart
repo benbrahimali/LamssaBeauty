@@ -55,6 +55,8 @@ class SalonAdminRepository {
     bool? open,
     /// Objectif de chiffre d'affaires mensuel. 0 retire l'objectif.
     double? monthlyRevenueTarget,
+    /// Part du pourboire revenant à l'employé. 100 = tout pour lui.
+    double? tipStaffPct,
   }) async {
     final data = await _api.patch('/salons/$salonId', body: {
       if (name != null) 'name': name,
@@ -68,6 +70,7 @@ class SalonAdminRepository {
       if (open != null) 'status': open ? 'open' : 'closed',
       if (monthlyRevenueTarget != null)
         'monthly_revenue_target': monthlyRevenueTarget,
+      if (tipStaffPct != null) 'tip_staff_pct': tipStaffPct,
     }) as Map<String, dynamic>;
     return Salon.fromDetail(data);
   }
@@ -91,6 +94,9 @@ class SalonAdminRepository {
     String nameAr = '',
     int bufferMin = 10,
     String description = '',
+    /// Null = le taux du coiffeur s'applique.
+    double? commissionPct,
+    double productCost = 0,
   }) async {
     final data = await _api.post('/salons/$salonId/services', body: {
       'name': name,
@@ -99,6 +105,8 @@ class SalonAdminRepository {
       'duration_min': durationMin,
       'buffer_min': bufferMin,
       'description': description,
+      if (commissionPct != null) 'commission_pct': commissionPct,
+      'product_cost': productCost,
     }) as Map<String, dynamic>;
     return ServiceItem.fromJson(data);
   }
@@ -112,6 +120,8 @@ class SalonAdminRepository {
     int? durationMin,
     int? bufferMin,
     bool? active,
+    double? commissionPct,
+    double? productCost,
   }) async {
     final data = await _api.patch('/salons/$salonId/services/$serviceId', body: {
       if (name != null) 'name': name,
@@ -120,6 +130,8 @@ class SalonAdminRepository {
       if (durationMin != null) 'duration_min': durationMin,
       if (bufferMin != null) 'buffer_min': bufferMin,
       if (active != null) 'active': active,
+      if (commissionPct != null) 'commission_pct': commissionPct,
+      if (productCost != null) 'product_cost': productCost,
     }) as Map<String, dynamic>;
     return ServiceItem.fromJson(data);
   }

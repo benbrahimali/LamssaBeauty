@@ -41,6 +41,7 @@ class SalonUpdate(BaseModel):
     lng: float | None = Field(default=None, ge=-180, le=180)
     # Objectif mensuel du gérant. 0 = il n'en fixe pas.
     monthly_revenue_target: float | None = Field(default=None, ge=0)
+    tip_staff_pct: float | None = Field(default=None, ge=0, le=100)
     expense_categories: list[str] | None = None
 
 
@@ -50,6 +51,9 @@ class ServiceCreate(BaseModel):
     price: float = Field(gt=0)
     duration_min: int = Field(gt=0, le=600)
     buffer_min: int = Field(default=10, ge=0, le=120)
+    # None = le taux du coiffeur s'applique.
+    commission_pct: float | None = Field(default=None, ge=0, le=100)
+    product_cost: float = Field(default=0.0, ge=0)
     category: str = ""
     description: str = ""
 
@@ -63,6 +67,8 @@ class ServiceUpdate(BaseModel):
     category: str | None = None
     description: str | None = None
     active: bool | None = None
+    commission_pct: float | None = Field(default=None, ge=0, le=100)
+    product_cost: float | None = Field(default=None, ge=0)
 
 
 class StaffCreate(BaseModel):

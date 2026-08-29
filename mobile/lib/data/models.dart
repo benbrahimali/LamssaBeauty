@@ -266,6 +266,13 @@ class ServiceItem {
   final String id;
   final String name;
   final String nameAr;
+
+  /// Commission propre à cette prestation. Null = le taux du coiffeur
+  /// s'applique — une couleur laisse moins de marge qu'une coupe.
+  final double? commissionPct;
+
+  /// Coût du produit, retenu par le salon avant partage.
+  final double productCost;
   final double price;
   final int duration;
   final String icon;
@@ -277,6 +284,8 @@ class ServiceItem {
     required this.id,
     required this.name,
     this.nameAr = '',
+    this.commissionPct,
+    this.productCost = 0,
     required this.price,
     required this.duration,
     this.icon = '✂️',
@@ -291,6 +300,8 @@ class ServiceItem {
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       nameAr: json['name_ar']?.toString() ?? '',
+      commissionPct: (json['commission_pct'] as num?)?.toDouble(),
+      productCost: (json['product_cost'] as num?)?.toDouble() ?? 0,
       price: _toDouble(json['price']),
       duration: _toInt(json['duration_min']),
       icon: category.emoji,

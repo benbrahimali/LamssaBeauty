@@ -8,7 +8,14 @@ from pymongo.errors import DuplicateKeyError
 from app.core.deps import assert_salon_access, get_salon
 from app.core.security import current_user
 from app.core.timeutils import local_day_bounds, to_local, utcnow
-from app.models.documents import Booking, Salon, StaffMember, Transaction, User
+from app.models.documents import (
+    Booking,
+    Salon,
+    Service,
+    StaffMember,
+    Transaction,
+    User,
+)
 from app.models.enums import (
     ACTIVE_BOOKING_STATUSES,
     BookingSource,
@@ -237,7 +244,18 @@ async def complete(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur du RDV introuvable")
 
     amount = body.amount_override if body.amount_override is not None else booking.price_total
-    split = SplitEngine.for_staff(amount, staff, tip=body.tip)
+
+    # La règle appliquée est celle du salon, ajustée pour ce coiffeur puis pour
+    # cette prestation : c'est là que chaque salon retrouve son organisation.
+    # Sur un RDV multi-services, le premier porte le taux — les prestations
+    # d'un même rendez-vous relèvent presque toujours de la même entente.
+    salon = await Salon.get(booking.salon_id)
+    service = (
+        await Service.get(booking.service_ids[0]) if booking.service_ids else None
+    )
+    split = SplitEngine.for_staff(
+        amount, staff, tip=body.tip, service=service, salon=salon
+    )
 
     tx = Transaction(
         booking_id=booking.id,
@@ -248,6 +266,7 @@ async def complete(
         salon_share=split.salon_share,
         staff_share=split.staff_share,
         tip=split.tip,
+        salon_tip=split.salon_tip,
     )
     try:
         await tx.insert()
@@ -274,5 +293,9 @@ async def complete(
             "staff_share": split.staff_share,
             "tip": split.tip,
             "staff_payout": split.staff_payout,
+            # Exposés pour que l'employé comprenne sa part : sans le coût du
+            # produit, « 15,75 sur 60 DT » paraît arbitraire.
+            "product_cost": split.product_cost,
+            "salon_tip": split.salon_tip,
         },
     }

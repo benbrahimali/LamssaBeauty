@@ -486,6 +486,8 @@ class Pilot {
     this.daysElapsed = 0,
     this.daysTotal = 0,
     this.onTrack,
+    this.tipStaffPct = 100,
+    this.defaultSplitPct = 50,
   });
 
   final Pnl pnl;
@@ -512,6 +514,11 @@ class Pilot {
   /// Le rythme suffit-il, à cette date, pour tenir l'objectif ?
   final bool? onTrack;
 
+  /// Règles de rémunération en vigueur : elles déterminent le seuil, donc
+  /// l'écran qui montre le seuil est aussi celui où on les règle.
+  final double tipStaffPct;
+  final double defaultSplitPct;
+
   factory Pilot.fromJson(Map<String, dynamic> json) => Pilot(
         pnl: Pnl.fromJson(json),
         breakEven: (json['break_even'] as num?)?.toDouble(),
@@ -524,5 +531,7 @@ class Pilot {
         daysElapsed: (json['days_elapsed'] as num?)?.toDouble() ?? 0,
         daysTotal: (json['days_total'] as num?)?.toDouble() ?? 0,
         onTrack: json['on_track'] as bool?,
+        tipStaffPct: (json['tip_staff_pct'] as num?)?.toDouble() ?? 100,
+        defaultSplitPct: (json['default_split_pct'] as num?)?.toDouble() ?? 50,
       );
 }

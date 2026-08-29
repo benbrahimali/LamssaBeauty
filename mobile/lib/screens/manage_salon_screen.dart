@@ -112,6 +112,8 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
               price: payload.price,
               durationMin: payload.durationMin,
               bufferMin: payload.bufferMin,
+              commissionPct: payload.commissionPct,
+              productCost: payload.productCost,
             )
           : _repo.updateService(
               widget.salonId,
@@ -121,6 +123,8 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
               price: payload.price,
               durationMin: payload.durationMin,
               bufferMin: payload.bufferMin,
+              commissionPct: payload.commissionPct,
+              productCost: payload.productCost,
             ),
       existing == null ? 'الخدمة تزادت ✅' : 'الخدمة تبدّلت ✅',
     );
@@ -616,12 +620,21 @@ class _ServicePayload {
   final int durationMin;
   final int bufferMin;
 
+  /// Null = le taux du coiffeur s'applique. Une couleur laisse moins de marge
+  /// qu'une coupe : le salon peut la commissionner à part.
+  final double? commissionPct;
+
+  /// Produit consommé, retenu par le salon avant partage.
+  final double productCost;
+
   const _ServicePayload({
     required this.name,
     required this.nameAr,
     required this.price,
     required this.durationMin,
     required this.bufferMin,
+    this.commissionPct,
+    this.productCost = 0,
   });
 }
 
@@ -640,6 +653,8 @@ class _ServiceSheetState extends State<_ServiceSheet> {
   late final TextEditingController _price;
   late final TextEditingController _duration;
   late final TextEditingController _buffer;
+  late final TextEditingController _commission;
+  late final TextEditingController _productCost;
 
   @override
   void initState() {
@@ -651,11 +666,25 @@ class _ServiceSheetState extends State<_ServiceSheet> {
         text: e == null ? '' : e.price.toStringAsFixed(0));
     _duration = TextEditingController(text: e == null ? '30' : '${e.duration}');
     _buffer = TextEditingController(text: e == null ? '10' : '${e.bufferMin}');
+    // Vide = pas de règle propre à cette prestation : celle du coiffeur
+    // s'applique. Préremplir avec 50 imposerait un taux jamais choisi.
+    _commission = TextEditingController(
+        text: e?.commissionPct == null ? '' : e!.commissionPct!.toStringAsFixed(0));
+    _productCost = TextEditingController(
+        text: (e?.productCost ?? 0) == 0 ? '' : e!.productCost.toStringAsFixed(0));
   }
 
   @override
   void dispose() {
-    for (final c in [_name, _nameAr, _price, _duration, _buffer]) {
+    for (final c in [
+      _name,
+      _nameAr,
+      _price,
+      _duration,
+      _buffer,
+      _commission,
+      _productCost,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -728,11 +757,54 @@ class _ServiceSheetState extends State<_ServiceSheet> {
               return n < 0 || n > 120 ? 'بين 0 و 120' : null;
             },
           ),
+          const SizedBox(height: 18),
+          // Règles de rémunération propres à cette prestation. Laissées vides,
+          // le taux du coiffeur et l'absence de produit s'appliquent : le
+          // gérant n'a rien à saisir tant qu'il ne veut pas d'exception.
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text('قواعد الخلاص (اختياري)',
+                style: AppTextStyle.dmSans(size: 12, color: AppColors.sub)),
+          ),
+          const SizedBox(height: 8),
+          Row(children: [
+            Expanded(
+              child: TextFormField(
+                controller: _commission,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: AppTextStyle.dmSans(size: 15),
+                decoration: const InputDecoration(hintText: 'نسبة الحجّام (%)'),
+                validator: (v) {
+                  final texte = (v ?? '').trim();
+                  if (texte.isEmpty) return null;
+                  final n = double.tryParse(texte) ?? -1;
+                  return n < 0 || n > 100 ? 'بين 0 و 100' : null;
+                },
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextFormField(
+                controller: _productCost,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: AppTextStyle.dmSans(size: 15),
+                decoration: const InputDecoration(hintText: 'ثمن المواد (DT)'),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            'ثمن المواد يتنحّى قبل التقسيم — الصالون هو اللي شراها',
+            style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+          ),
           const SizedBox(height: 20),
           GoldButton(
             text: 'سجّل',
             onPressed: () {
               if (!_formKey.currentState!.validate()) return;
+              final commission = _commission.text.trim();
               Navigator.pop(
                 context,
                 _ServicePayload(
@@ -741,6 +813,10 @@ class _ServiceSheetState extends State<_ServiceSheet> {
                   price: double.parse(_price.text.trim()),
                   durationMin: int.parse(_duration.text.trim()),
                   bufferMin: int.parse(_buffer.text.trim()),
+                  commissionPct:
+                      commission.isEmpty ? null : double.parse(commission),
+                  productCost:
+                      double.tryParse(_productCost.text.trim()) ?? 0,
                 ),
               );
             },

@@ -35,6 +35,9 @@ class _FinanceScreenState extends State<FinanceScreen> {
   /// Mois consulté : 0 = en cours, -1 = le précédent.
   int _offset = 0;
 
+  /// Part du pourboire revenant à l'employé, telle que le salon l'a réglée.
+  double _tipStaffPct = 100;
+
   CashRepository get _repo => context.read<CashRepository>();
 
   @override
@@ -66,6 +69,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
       });
       setState(() {
         _pilot = results[0] as Pilot;
+        _tipStaffPct = (results[0] as Pilot).tipStaffPct;
         _charges = charges.charges;
         _monthlyCharges = charges.monthlyEquivalent;
         _loading = false;
@@ -142,6 +146,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
             const SizedBox(height: 10),
             ...pnl.byCategory.entries.map((e) => _categoryRow(e.key, e.value, pnl)),
           ],
+          const SizedBox(height: 20),
+          _sectionTitle('قواعد الخلاص'),
+          const SizedBox(height: 10),
+          _buildTipPolicy(pnl),
           const SizedBox(height: 20),
           _sectionTitle('المصاريف القارة'),
           const SizedBox(height: 4),
@@ -493,6 +501,108 @@ class _FinanceScreenState extends State<FinanceScreen> {
         ),
       ]),
     );
+  }
+
+  /// Sort du pourboire : il appartient au salon de décider, l'app ne tranche
+  /// pas à sa place. Cent pour cent à l'employé reste le défaut, parce que
+  /// c'est l'usage.
+  Widget _buildTipPolicy(Pnl pnl) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.volunteer_activism_rounded,
+              size: 18, color: AppColors.gold),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text('البقشيش',
+                style: AppTextStyle.dmSans(weight: FontWeight.w700)),
+          ),
+          GestureDetector(
+            onTap: _editTipPolicy,
+            behavior: HitTestBehavior.opaque,
+            child: const Icon(Icons.edit_rounded, size: 15, color: AppColors.sub),
+          ),
+        ]),
+        const SizedBox(height: 6),
+        Text(
+          _tipStaffPct >= 100
+              ? 'الكل للحجّام — هذا هو المعتاد'
+              : _tipStaffPct <= 0
+                  ? 'الكل للصالون'
+                  : '${_tipStaffPct.toStringAsFixed(0)} % للحجّام، '
+                      'الباقي للصالون',
+          style: AppTextStyle.dmSans(size: 12, color: AppColors.sub),
+        ),
+        if (pnl.tipsCollected > 0 || _tipStaffPct < 100) ...[
+          const SizedBox(height: 6),
+          Text(
+            'هالشهر : ${pnl.tipsCollected.toStringAsFixed(0)} DT للفريق',
+            style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Future<void> _editTipPolicy() async {
+    final controller =
+        TextEditingController(text: _tipStaffPct.toStringAsFixed(0));
+    final valeur = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('حصّة الحجّام من البقشيش',
+            style: AppTextStyle.playfair(size: 17)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          style: AppTextStyle.dmSans(),
+          decoration: InputDecoration(
+            hintText: '100 = الكل للحجّام',
+            hintStyle: AppTextStyle.dmSans(size: 13, color: AppColors.sub),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('رجوع', style: AppTextStyle.dmSans(color: AppColors.sub)),
+          ),
+          TextButton(
+            onPressed: () {
+              final n = double.tryParse(controller.text.trim());
+              Navigator.pop(ctx, n != null && n >= 0 && n <= 100 ? n : null);
+            },
+            child: Text('سجّل',
+                style: AppTextStyle.dmSans(
+                    color: AppColors.gold, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (valeur == null || !mounted) return;
+
+    try {
+      await context
+          .read<SalonAdminRepository>()
+          .updateSalon(widget.salonId, tipStaffPct: valeur);
+      setState(() => _tipStaffPct = valeur);
+      if (mounted) {
+        // Le changement ne vaut que pour les encaissements à venir : les
+        // transactions passées gardent la règle qui s'appliquait.
+        showAppSnack(context, 'تسجّل — يطبّق على الخلاص الجاي', success: true);
+      }
+    } on ApiException catch (e) {
+      if (mounted) showAppSnack(context, e.message);
+    }
   }
 
   Widget _sectionTitle(String texte) => Align(

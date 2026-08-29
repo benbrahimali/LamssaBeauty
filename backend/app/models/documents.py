@@ -89,6 +89,10 @@ class Salon(Document):
     # Caisse (§3.4)
     default_split_pct: float = 50.0
 
+    # Part du pourboire revenant à l'employé. 100 % par défaut — c'est l'usage,
+    # mais certains salons les mettent en commun ou les partagent.
+    tip_staff_pct: float = 100.0
+
     # Objectif de chiffre d'affaires mensuel, fixé par le gérant. Zéro = pas
     # d'objectif : on n'invente pas une cible à sa place, il n'y aurait aucune
     # raison de la croire.
@@ -179,6 +183,15 @@ class Service(Document):
     name_ar: str = ""
     price: float
     duration_min: int
+
+    # Commission propre à cette prestation. None = on retombe sur le taux du
+    # coiffeur, puis sur celui du salon. Une couleur laisse moins de marge
+    # qu'une coupe : imposer un taux unique fausserait l'un ou l'autre.
+    commission_pct: float | None = None
+
+    # Coût du produit consommé, retenu par le salon avant partage. Sans lui,
+    # le salon paierait la moitié d'un produit qu'il a acheté seul.
+    product_cost: float = 0.0
     buffer_min: int = 10                       # temps de battement (§3.3)
     category: str = ""
     description: str = ""
@@ -257,7 +270,12 @@ class Transaction(Document):
     method: PaymentMethod
     salon_share: float
     staff_share: float
-    tip: float = 0.0                           # pourboire : 100% employé
+
+    # Part du pourboire gardée par le salon quand il ne les laisse pas
+    # entièrement à l'employé. Sans ce champ, cet argent disparaîtrait des
+    # comptes alors que le client l'a bien payé.
+    salon_tip: float = 0.0
+    tip: float = 0.0                           # part du pourboire revenant à l'employé
     paid_at: datetime = Field(default_factory=utcnow)
     closed: bool = False                       # verrouillée par une clôture
     closure_id: PydanticObjectId | None = None

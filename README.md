@@ -126,6 +126,39 @@ temps écoulé** — comparer le réalisé à l'objectif entier afficherait « e
 retard » tout le mois. La projection reste muette sous un jour de recul : une
 grosse matinée annoncerait un mois record.
 
+### Règles de rémunération (§3.4)
+
+Deux salons voisins ne paient pas leur équipe de la même façon, et aucun des
+deux n'a tort. L'app applique donc **la règle du salon**, pas une règle
+Lamssa. Trois réglages suffisent à couvrir ce qui se pratique réellement.
+
+**Le taux** se résout par ordre de précision, du plus spécifique au plus
+général :
+
+```
+commission du service  →  commission du coiffeur  →  split par défaut du salon
+```
+
+Le taux du service existe parce qu'une coloration et une coupe ne se
+rémunèrent presque jamais pareil : le gérant peut donner 35 % sur l'une et
+50 % sur l'autre sans toucher aux contrats. Laissé vide, il s'efface et le
+taux du coiffeur reprend la main.
+
+**Le coût produit** est retenu par le salon *avant* le partage. C'est le point
+qui fâche quand il est mal fait : une couleur à 60 DT dont 15 DT de produit
+partagée à 35 % donne 15,75 DT au coiffeur, pas 21 DT — le salon ne peut pas
+reverser une part du tube de teinture. Le détail du calcul remonte dans la
+réponse d'encaissement (`product_cost`, `salon_tip`) pour que l'employé
+comprenne son chiffre au lieu de le subir.
+
+**Le pourboire** suit une politique de salon (`tip_staff_pct`) : 100 % au
+coiffeur par défaut, mais un salon qui met les pourboires en commun règle 50 %
+et la part du salon rejoint sa marge. Un pourboire n'est jamais soumis à la
+commission — c'est un don au geste, pas un chiffre d'affaires.
+
+Vérifié en conditions réelles : couleur 60 DT, commission 35 %, produit 15 DT,
+pourboire 10 DT → **coiffeur 15,75 + 10 de pourboire, salon 44,25**.
+
 ### Médias : Cloudinary, photos et reels (§3.2, §3.8)
 
 Photos de salon et **reels vidéo** passent par Cloudinary quand ses clés sont
