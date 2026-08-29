@@ -30,7 +30,8 @@ class ProfileScreen extends StatelessWidget {
           if (auth.status == AuthStatus.loggedIn) ...[
             SliverToBoxAdapter(child: _buildRoleSwitch(context, auth)),
             SliverToBoxAdapter(child: _buildAccountInfo(context, auth)),
-          ],
+          ] else
+            SliverToBoxAdapter(child: _buildSignUpInvite(context)),
           SliverToBoxAdapter(child: _buildMenu(context, auth)),
           const SliverToBoxAdapter(child: SizedBox(height: 110)),
         ],
@@ -40,12 +41,17 @@ class ProfileScreen extends StatelessWidget {
 
   Widget _buildHeader(BuildContext context, AuthController auth) {
     final user = auth.user;
+    final guest = auth.status != AuthStatus.loggedIn;
     final name = user?.name.trim().isNotEmpty == true ? user!.name : 'ضيف';
-    final label = switch (auth.role) {
-      AppRole.client => '👤 عميل',
-      AppRole.owner => '👑 صاحب صالون',
-      AppRole.coiffeur => '✂️ حجام',
-    };
+    // Annoncer « عميل » à quelqu'un qui n'a pas de compte est faux : le rôle
+    // n'existe que côté serveur, une fois inscrit.
+    final label = guest
+        ? null
+        : switch (auth.role) {
+            AppRole.client => '👤 عميل',
+            AppRole.owner => '👑 صاحب صالون',
+            AppRole.coiffeur => '✂️ حجام',
+          };
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -82,25 +88,99 @@ class ProfileScreen extends StatelessWidget {
             )),
         const SizedBox(height: 4),
         Text(
-          user?.phone.isNotEmpty == true ? user!.phone : 'Non connecté',
+          user?.phone.isNotEmpty == true ? user!.phone : 'تتفرّج كزائر',
           style: GoogleFonts.dmSans(fontSize: 13, color: AppColors.sub),
         ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.gold.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(50),
-            border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+        if (label != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppColors.gold.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(50),
+              border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+            ),
+            child: Text(label,
+                style: GoogleFonts.dmSans(
+                  fontSize: 13,
+                  color: AppColors.gold,
+                  fontWeight: FontWeight.w600,
+                )),
           ),
-          child: Text(label,
-              style: GoogleFonts.dmSans(
-                fontSize: 13,
-                color: AppColors.gold,
-                fontWeight: FontWeight.w600,
-              )),
-        ),
+        ],
       ]),
+    );
+  }
+
+  /// Ce qu'un visiteur gagne à s'inscrire.
+  ///
+  /// Sans compte il ne peut que regarder : réserver, aimer et suivre ses RDV
+  /// exigent une identité. Autant le lui dire ici, plutôt que de le laisser
+  /// buter sur un refus au moment de réserver.
+  Widget _buildSignUpInvite(BuildContext context) {
+    const avantages = [
+      ('📅', 'احجز في ثواني'),
+      ('🔔', 'تذكير قبل موعدك'),
+      ('❤️', 'سجّل الحجامة اللي عجبوك'),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(colors: [
+            AppColors.gold.withValues(alpha: 0.14),
+            AppColors.pink.withValues(alpha: 0.08),
+          ]),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('اعمل حساب في دقيقة',
+              style: GoogleFonts.playfairDisplay(
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text,
+              )),
+          const SizedBox(height: 4),
+          Text('برقم تليفونك، بلا كلمة سر',
+              style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.sub)),
+          const SizedBox(height: 16),
+          ...avantages.map((a) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(children: [
+                  Text(a.$1, style: const TextStyle(fontSize: 15)),
+                  const SizedBox(width: 10),
+                  Text(a.$2,
+                      style:
+                          GoogleFonts.dmSans(fontSize: 13, color: AppColors.text)),
+                ]),
+              )),
+          const SizedBox(height: 6),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.gold,
+                foregroundColor: Colors.black,
+                minimumSize: const Size.fromHeight(50),
+                shape:
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              // `onSignedOut` ramène à l'écran d'accueil non connecté, d'où
+              // part l'inscription : c'est le même chemin que la déconnexion.
+              onPressed: onSignedOut,
+              child: Text('ابدأ ✨',
+                  style: GoogleFonts.dmSans(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black,
+                  )),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 
@@ -277,16 +357,20 @@ class ProfileScreen extends StatelessWidget {
           'label': 'خدمتي',
           'action': 'my_portfolio',
         },
-      {'icon': Icons.person_rounded, 'label': 'تعديل الحساب', 'action': 'soon'},
-      {
-        'icon': Icons.lock_rounded,
-        'label': 'الأمان والخصوصية',
-        'action': 'soon'
-      },
+      // Modifier un compte ou régler sa confidentialité n'a aucun sens tant
+      // qu'il n'y en a pas : ces entrées ne mèneraient nulle part.
+      if (loggedIn) ...[
+        {'icon': Icons.person_rounded, 'label': 'تعديل الحساب', 'action': 'soon'},
+        {
+          'icon': Icons.lock_rounded,
+          'label': 'الأمان والخصوصية',
+          'action': 'soon'
+        },
+      ],
       {'icon': Icons.help_rounded, 'label': 'المساعدة', 'action': 'soon'},
       {
         'icon': loggedIn ? Icons.logout_rounded : Icons.login_rounded,
-        'label': loggedIn ? 'تسجيل الخروج' : 'تسجيل الدخول',
+        'label': loggedIn ? 'تسجيل الخروج' : 'عندي حساب — دخول',
         'action': loggedIn ? 'logout' : 'login',
       },
     ];

@@ -293,6 +293,7 @@ class _AppShellState extends State<_AppShell> {
               currentIndex: _navIndex,
               role: role,
               badgeCount: unread,
+              isGuest: context.watch<AuthController>().status != AuthStatus.loggedIn,
               onTap: (i) {
                 setState(() => _navIndex = i);
                 if (i == _notificationsIndex) {

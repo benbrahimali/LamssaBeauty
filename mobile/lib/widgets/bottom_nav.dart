@@ -9,12 +9,17 @@ class LamssaBottomNav extends StatelessWidget {
   final AppRole role;
   final int badgeCount;
 
+  /// Un visiteur n'a pas de compte : lui parler de « mon compte » ne veut rien
+  /// dire, l'onglet doit l'inviter à s'inscrire.
+  final bool isGuest;
+
   const LamssaBottomNav({
     super.key,
     required this.currentIndex,
     required this.onTap,
     this.role = AppRole.client,
     this.badgeCount = 0,
+    this.isGuest = false,
   });
 
   @override
@@ -71,7 +76,9 @@ class LamssaBottomNav extends StatelessWidget {
           const _NavItemData(icon: Icons.search_rounded, label: 'اكتشف'),
           const _NavItemData(icon: Icons.local_fire_department_rounded, label: 'موضة'),
           const _NavItemData(icon: Icons.notifications_rounded, label: 'إشعارات', hasBadge: true),
-          const _NavItemData(icon: Icons.person_rounded, label: 'حسابي'),
+          isGuest
+              ? const _NavItemData(icon: Icons.person_add_rounded, label: 'تسجيل')
+              : const _NavItemData(icon: Icons.person_rounded, label: 'حسابي'),
         ];
       case AppRole.owner:
         return [

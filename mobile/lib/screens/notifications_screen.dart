@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../data/models.dart';
+import '../state/auth_controller.dart';
 import '../state/notifications_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
@@ -17,16 +18,33 @@ class NotificationsScreen extends StatefulWidget {
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _unreadOnly = false;
 
+  bool get _isGuest =>
+      context.read<AuthController>().status != AuthStatus.loggedIn;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<NotificationsController>().load();
+      // Sans session, `/notifications` répond 401 : appeler quand même
+      // afficherait une erreur brute à quelqu'un dont le seul tort est de ne
+      // pas encore avoir de compte.
+      if (mounted && !_isGuest) context.read<NotificationsController>().load();
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (context.watch<AuthController>().status != AuthStatus.loggedIn) {
+      return const Scaffold(
+        backgroundColor: AppColors.bg,
+        body: AppEmpty(
+          emoji: '🔔',
+          title: 'اعمل حساب باش توصلك الإشعارات',
+          subtitle: 'تذكير بمواعيدك، وتأكيد الحجز',
+        ),
+      );
+    }
+
     final controller = context.watch<NotificationsController>();
     final items = _unreadOnly
         ? controller.items.where((n) => !n.read).toList()
