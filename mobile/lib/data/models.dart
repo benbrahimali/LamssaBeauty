@@ -377,6 +377,10 @@ class AppNotification {
   bool read;
   final String icon;
 
+  /// Charge utile du serveur — `booking_id`, `salon_id`… C'est elle qui permet
+  /// d'ouvrir l'écran concerné au lieu de se contenter de marquer comme lu.
+  final Map<String, String> data;
+
   AppNotification({
     required this.id,
     required this.type,
@@ -384,6 +388,7 @@ class AppNotification {
     required this.time,
     this.read = false,
     this.icon = '🔔',
+    this.data = const {},
   });
 
   static const _icons = {
@@ -410,6 +415,9 @@ class AppNotification {
       time: relativeTime(json['created_at']?.toString()),
       read: json['read'] == true,
       icon: _icons[type] ?? '🔔',
+      data: ((json['data'] as Map?) ?? const {}).map(
+        (key, value) => MapEntry(key.toString(), value?.toString() ?? ''),
+      ),
     );
   }
 }

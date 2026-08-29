@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../core/notification_route.dart';
 import '../data/models.dart';
 import '../state/auth_controller.dart';
 import '../state/notifications_controller.dart';
@@ -9,7 +10,14 @@ import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+  const NotificationsScreen({super.key, this.onOpen});
+
+  /// Ouvre l'écran concerné par la notification.
+  ///
+  /// Le même aiguillage que pour un tap sur la notification système : une
+  /// notification lue dans la liste doit mener au même endroit que celle
+  /// touchée dans le volet Android.
+  final void Function(AppNotification notif)? onOpen;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
@@ -82,7 +90,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, i) => _NotifCard(
           notif: items[i],
-          onTap: () => controller.markRead(items[i]),
+          actionable: widget.onOpen != null &&
+              isActionable(items[i].type, context.read<AuthController>().role),
+          onTap: () {
+            controller.markRead(items[i]);
+            widget.onOpen?.call(items[i]);
+          },
         ),
       ),
     );
@@ -157,7 +170,15 @@ class _NotifCard extends StatelessWidget {
   final AppNotification notif;
   final VoidCallback onTap;
 
-  const _NotifCard({required this.notif, required this.onTap});
+  /// Une carte qui ne mène nulle part n'affiche pas de chevron : un indicateur
+  /// qui ment est pire que pas d'indicateur.
+  final bool actionable;
+
+  const _NotifCard({
+    required this.notif,
+    required this.onTap,
+    this.actionable = false,
+  });
 
   /// Teinte par famille de notification, pour repérer l'important d'un coup d'œil.
   Color get _accent {
@@ -212,6 +233,11 @@ class _NotifCard extends StatelessWidget {
                   style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.sub)),
             ]),
           ),
+          if (actionable)
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.chevron_right, size: 18, color: AppColors.sub),
+            ),
           if (!notif.read)
             Container(
               width: 8, height: 8,

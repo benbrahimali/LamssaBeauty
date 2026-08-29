@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'app_providers.dart';
 import 'core/api_exception.dart';
+import 'core/notification_route.dart';
 import 'core/push_service.dart';
 import 'data/repositories/salon_repository.dart';
 import 'data/models.dart';
@@ -34,6 +35,7 @@ import 'state/portfolio_controller.dart';
 import 'theme/app_theme.dart';
 import 'widgets/async_states.dart';
 import 'widgets/bottom_nav.dart';
+import 'widgets/reviews_moderation_sheet.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -121,30 +123,51 @@ class _AppShellState extends State<_AppShell> {
 
   void _openFromPush(Map<String, dynamic> data) {
     if (!mounted) return;
-    final type = data['type']?.toString() ?? '';
     context.read<NotificationsController>().load();
+    _openNotification(data['type']?.toString() ?? '', data);
+  }
 
-    switch (type) {
-      case 'booking_confirmed':
-      case 'booking_cancelled':
-      case 'reminder_j1':
-      case 'reminder_h2':
-      case 'your_turn':
-        // Côté pro, ces notifications parlent de l'agenda ; côté client, de ses RDV.
-        if (_auth.role == AppRole.client) {
-          if (_auth.status != AuthStatus.loggedIn) return;
-          Navigator.of(context).push(MaterialPageRoute(
-            builder: (_) => const MyBookingsScreen(),
-          ));
-        } else {
-          setState(() { _screen = _Screen.main; _tab = tabsFor(_auth.role).first; });
-        }
-      case 'advance_requested':
-      case 'advance_decided':
-      case 'closure_ready':
-        setState(() { _screen = _Screen.main; _tab = LamssaTab.cash; });
-      default:
-        setState(() { _screen = _Screen.main; _tab = LamssaTab.notifications; });
+  /// Aiguillage commun au volet Android et à la liste de l'app.
+  ///
+  /// Les deux doivent mener au même endroit : une notification touchée dans le
+  /// volet système et la même notification touchée dans la liste sont le même
+  /// objet pour l'utilisateur. La décision elle-même vit dans
+  /// `core/notification_route.dart`, où elle est testable.
+  void _openNotification(String type, Map<String, dynamic> data) {
+    if (!mounted) return;
+    final role = _auth.role;
+
+    void allerA(LamssaTab tab) {
+      setState(() {
+        _screen = _Screen.main;
+        _tab = tabsFor(role).contains(tab) ? tab : tabsFor(role).first;
+      });
+    }
+
+    switch (targetFor(type, role)) {
+      case NotificationTarget.myBookings:
+        if (_auth.status != AuthStatus.loggedIn) return;
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const MyBookingsScreen()),
+        );
+
+      case NotificationTarget.agenda:
+        allerA(role == AppRole.owner ? LamssaTab.dashboard : LamssaTab.agenda);
+
+      case NotificationTarget.cash:
+        allerA(role == AppRole.owner ? LamssaTab.dashboard : LamssaTab.cash);
+
+      case NotificationTarget.reviews:
+        final salonId = _auth.context?.ownedSalonId;
+        if (salonId != null) ReviewsModerationSheet.show(context, salonId);
+
+      case NotificationTarget.trending:
+        allerA(LamssaTab.trending);
+
+      case NotificationTarget.none:
+        // Rien à ouvrir : on laisse l'utilisateur où il est plutôt que de le
+        // renvoyer vers une liste qu'il regarde déjà.
+        break;
     }
   }
 
@@ -383,7 +406,9 @@ class _AppShellState extends State<_AppShell> {
         LamssaTab.dashboard => const CaisseScreen(),
         LamssaTab.agenda => const CoiffeurDashboardScreen(),
         LamssaTab.cash => const CoiffeurDashboardScreen(showAgendaOnly: true),
-        LamssaTab.notifications => const NotificationsScreen(),
+        LamssaTab.notifications => NotificationsScreen(
+            onOpen: (notif) => _openNotification(notif.type, notif.data),
+          ),
         LamssaTab.profile => ProfileScreen(onSignedOut: _onSignedOut),
       };
 
