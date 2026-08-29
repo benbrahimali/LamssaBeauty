@@ -139,3 +139,43 @@ def test_tous_les_problemes_sont_signales_d_un_coup():
     assert "JWT_SECRET" in message
     assert "PSP_WEBHOOK_SECRET" in message
     assert "SMS_PROVIDER" in message
+
+
+# ── Cohérence du rôle (§2.5, §3.5) ───────────────────────────────────────────
+def test_le_role_owner_prime_sur_staff():
+    """Un gérant qui coupe aussi les cheveux reste gérant.
+
+    `sync_role` teste la possession d'un salon avant le rattachement à une
+    équipe : l'ordre inverse rétrograderait un patron-coiffeur en employé le
+    jour où il quitte l'équipe d'un confrère.
+    """
+    import inspect
+
+    from app.api.v1.salons import sync_role
+
+    source = inspect.getsource(sync_role)
+    assert source.index("Salon.owner_id") < source.index("StaffMember.user_id")
+
+
+def test_les_trois_roles_couvrent_les_cas_possibles():
+    """Le rôle dérive de ce que le compte possède, il n'est jamais déclaratif."""
+    from app.models.enums import Role
+
+    assert {r.value for r in Role} == {"CLIENT", "STAFF", "OWNER"}
+
+
+def test_aucune_route_ne_s_appuie_sur_le_role_staff():
+    """Les accès employé passent par l'existence d'un StaffMember.
+
+    Si ce test tombe, c'est qu'une route s'est mise à gater sur `Role.STAFF` :
+    il faut alors s'assurer que `sync_role` est appelé partout où un employé
+    peut perdre son rattachement, sinon un renvoyé garderait la porte ouverte.
+    """
+    import pathlib
+
+    api = pathlib.Path(__file__).resolve().parents[1] / "app" / "api"
+    # `Depends(...)` cible l'usage réel : chercher le nom seul attraperait
+    # aussi les commentaires qui en parlent, celui-ci compris.
+    for fichier in api.rglob("*.py"):
+        source = fichier.read_text(encoding="utf-8")
+        assert "Depends(require_role(Role.STAFF" not in source, fichier.name

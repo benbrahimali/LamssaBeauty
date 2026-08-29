@@ -397,7 +397,35 @@ async def remove_staff(staff_id: PydanticObjectId, salon: Salon = Depends(owned_
             f"{upcoming} RDV à venir sur ce coiffeur — réaffectez-les ou annulez-les d'abord",
         )
     await member.delete()
+    await sync_role(member.user_id)
     return {"removed": str(staff_id)}
+
+
+async def sync_role(user_id: PydanticObjectId) -> None:
+    """Remet le rôle du compte en accord avec ce qu'il possède réellement.
+
+    Aucune route ne s'appuie aujourd'hui sur `Role.STAFF` — les accès employé
+    passent par l'existence d'un `StaffMember`. Un rôle périmé n'ouvre donc
+    rien. Mais le jour où quelqu'un ajoutera un `require_role(Role.STAFF)`, un
+    employé renvoyé passerait la porte : on referme le piège avant.
+
+    Un gérant reste gérant tant qu'il possède un salon, même s'il quitte une
+    équipe où il coupait aussi les cheveux — d'où l'ordre des tests.
+    """
+    user = await User.get(user_id)
+    if user is None:
+        return
+
+    if await Salon.find_one(Salon.owner_id == user.id):
+        role = Role.OWNER
+    elif await StaffMember.find_one(StaffMember.user_id == user.id):
+        role = Role.STAFF
+    else:
+        role = Role.CLIENT
+
+    if user.role is not role:
+        user.role = role
+        await user.save()
 
 
 @router.get("/{salon_id}/ranking", summary="Classement interne de l'équipe (motivation)")
