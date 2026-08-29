@@ -190,11 +190,9 @@ class ProfileScreen extends StatelessWidget {
   /// Un compte n'accède qu'aux espaces que son rôle serveur autorise :
   /// afficher les autres ne ferait que produire des 403.
   Widget _buildRoleSwitch(BuildContext context, AuthController auth) {
-    final available = <AppRole>[
-      AppRole.client,
-      if (auth.context?.ownedSalonId != null) AppRole.owner,
-      if (auth.context?.staffId != null) AppRole.coiffeur,
-    ];
+    // La liste vient du contrôleur : dupliquer la règle ici finirait par
+    // proposer un espace que `switchView` refuse, ou l'inverse.
+    final available = auth.availableRoles;
     if (available.length < 2) return const SizedBox.shrink();
 
     const labels = {

@@ -43,6 +43,41 @@ class AuthController extends ChangeNotifier {
   AppRole _viewAs = AppRole.client;
   AppRole get role => _viewAs;
 
+  /// Espaces réellement accessibles au compte.
+  List<AppRole> get availableRoles =>
+      rolesFor(ownedSalonId: _context?.ownedSalonId, staffId: _context?.staffId);
+
+  /// Espaces ouverts par les rattachements du compte.
+  ///
+  /// Dérivés de ce que le serveur renvoie, jamais du rôle déclaré : c'est la
+  /// possession d'un salon ou d'un profil coiffeur qui ouvre un espace,
+  /// exactement comme le backend en décide. Afficher les autres ne produirait
+  /// que des 403.
+  static List<AppRole> rolesFor({String? ownedSalonId, String? staffId}) => [
+        AppRole.client,
+        if (ownedSalonId != null) AppRole.owner,
+        if (staffId != null) AppRole.coiffeur,
+      ];
+
+  /// Espace à afficher après un rechargement du contexte.
+  ///
+  /// On conserve le choix de l'utilisateur tant qu'il reste valable : écraser
+  /// systématiquement par le rôle serveur renvoyait un gérant passé en vue
+  /// client vers son tableau de bord dès qu'il modifiait son profil.
+  ///
+  /// Un espace perdu entre-temps — coiffeur renvoyé de son salon — retombe sur
+  /// le rôle que le serveur reconnaît, et à défaut sur client, qui existe
+  /// toujours.
+  static AppRole viewAfterRefresh({
+    required AppRole current,
+    required List<AppRole> available,
+    required AppRole serverRole,
+  }) {
+    if (available.contains(current)) return current;
+    if (available.contains(serverRole)) return serverRole;
+    return AppRole.client;
+  }
+
   String? get salonId => _context?.activeSalonId;
   String? get staffId => _context?.staffId;
 
@@ -56,7 +91,9 @@ class AuthController extends ChangeNotifier {
     }
     try {
       _context = await _repo.me();
+      // À l'ouverture, on part de l'espace que le serveur reconnaît.
       _viewAs = _context!.user.role;
+      _alignView();
       _status = AuthStatus.loggedIn;
       unawaited(_push.registerForUser());
     } on ApiException {
@@ -89,6 +126,7 @@ class AuthController extends ChangeNotifier {
       await _repo.verifyOtp(phone: phone, code: code, name: name);
       _context = await _repo.me();
       _viewAs = _context!.user.role;
+      _alignView();
       _status = AuthStatus.loggedIn;
       _devCode = null;
       // Sans attendre : la permission push ne doit pas retarder l'entrée dans l'app.
@@ -138,16 +176,27 @@ class AuthController extends ChangeNotifier {
   Future<void> refreshContext() async {
     try {
       _context = await _repo.me();
-      _viewAs = _context!.user.role;
+      _alignView();
       notifyListeners();
     } on ApiException {
       // On garde le contexte précédent plutôt que de vider l'écran.
     }
   }
 
+  /// Bascule d'espace. Un rôle non accordé est ignoré : le serveur le
+  /// refuserait de toute façon, autant ne pas afficher un écran mort.
   void switchView(AppRole role) {
+    if (!availableRoles.contains(role)) return;
     _viewAs = role;
     notifyListeners();
+  }
+
+  void _alignView() {
+    _viewAs = viewAfterRefresh(
+      current: _viewAs,
+      available: availableRoles,
+      serverRole: _context?.user.role ?? AppRole.client,
+    );
   }
 
   Future<void> logout() async {
