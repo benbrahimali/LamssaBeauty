@@ -7,11 +7,17 @@ class LandingScreen extends StatefulWidget {
   final VoidCallback onSignUp;
   final VoidCallback onGuest;
 
+  /// Inscription d'un professionnel : même compte, même OTP, mais on enchaîne
+  /// sur la création du salon. Le rôle vient du serveur — on ne devient gérant
+  /// qu'en ayant un salon, pas en le déclarant.
+  final VoidCallback onSignUpPro;
+
   const LandingScreen({
     super.key,
     required this.onSignIn,
     required this.onSignUp,
     required this.onGuest,
+    required this.onSignUpPro,
   });
 
   @override
@@ -289,9 +295,34 @@ class _LandingScreenState extends State<LandingScreen>
                 ],
               ),
               alignment: Alignment.center,
-              child: Text('إنشاء حساب جديد ✨', style: GoogleFonts.dmSans(
+              child: Text('نحجز كحريف ✨', style: GoogleFonts.dmSans(
                 fontSize: 16, fontWeight: FontWeight.w800, color: Colors.black,
               )),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Parcours professionnel : distinct dès l'entrée, parce qu'un gérant
+          // qui télécharge l'app veut inscrire son salon, pas réserver.
+          GestureDetector(
+            onTap: widget.onSignUpPro,
+            child: Container(
+              height: 56,
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.border),
+              ),
+              alignment: Alignment.center,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('💈', style: TextStyle(fontSize: 17)),
+                  const SizedBox(width: 8),
+                  Text('عندي صالون', style: GoogleFonts.dmSans(
+                    fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.text,
+                  )),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 12),

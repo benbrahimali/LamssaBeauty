@@ -13,6 +13,7 @@ import 'screens/booking_screen.dart';
 import 'screens/caisse_screen.dart';
 import 'screens/coiffeur_dashboard_screen.dart';
 import 'screens/coiffeur_profile_screen.dart';
+import 'screens/create_salon_screen.dart';
 import 'screens/explore_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/landing_screen.dart';
@@ -88,7 +89,27 @@ class _AppShell extends StatefulWidget {
 
 class _AppShellState extends State<_AppShell> {
   _Screen _screen = _Screen.splash;
-  int _navIndex = 0;
+  /// Onglet courant, identifié et non numéroté : les rôles n'ont pas le même
+  /// nombre d'onglets, et un index nu envoyait le gérant sur un écran vide.
+  LamssaTab _tab = LamssaTab.home;
+
+  /// Position de l'onglet courant dans la barre du rôle actif.
+  int get _navIndex {
+    final tabs = tabsFor(_auth.role);
+    final index = tabs.indexOf(_tab);
+    return index < 0 ? 0 : index;
+  }
+
+  /// Rôle affiché à la dernière image : sert à repositionner l'onglet quand
+  /// l'utilisateur bascule entre client et gérant depuis son profil.
+  AppRole? _lastRole;
+
+  /// L'utilisateur s'inscrit-il pour gérer un salon ?
+  ///
+  /// Le rôle n'est pas déclaratif : le serveur promeut en OWNER à la création
+  /// du salon. Cette intention sert donc seulement à enchaîner sur le bon
+  /// écran une fois le compte ouvert.
+  bool _proSignup = false;
 
   @override
   void initState() {
@@ -97,10 +118,6 @@ class _AppShellState extends State<_AppShell> {
     // l'accueil : c'est ce qui différencie un rappel utile d'une alerte subie.
     context.read<PushService>().onTap = _openFromPush;
   }
-
-  /// Le client a cinq onglets (« En vogue » en plus), les rôles pro quatre :
-  /// l'index des notifications n'est donc pas le même selon le rôle.
-  int get _notificationsIndex => _auth.role == AppRole.client ? 3 : 2;
 
   void _openFromPush(Map<String, dynamic> data) {
     if (!mounted) return;
@@ -120,14 +137,14 @@ class _AppShellState extends State<_AppShell> {
             builder: (_) => const MyBookingsScreen(),
           ));
         } else {
-          setState(() { _screen = _Screen.main; _navIndex = 0; });
+          setState(() { _screen = _Screen.main; _tab = tabsFor(_auth.role).first; });
         }
       case 'advance_requested':
       case 'advance_decided':
       case 'closure_ready':
-        setState(() { _screen = _Screen.main; _navIndex = 1; });
+        setState(() { _screen = _Screen.main; _tab = LamssaTab.cash; });
       default:
-        setState(() { _screen = _Screen.main; _navIndex = _notificationsIndex; });
+        setState(() { _screen = _Screen.main; _tab = LamssaTab.notifications; });
     }
   }
 
@@ -163,11 +180,25 @@ class _AppShellState extends State<_AppShell> {
   }
 
   void _onAuthSuccess() {
+    final wasPro = _proSignup;
     setState(() {
+      _proSignup = false;
       _screen = _Screen.main;
-      _navIndex = 0;
+      _tab = tabsFor(_auth.role).first;
     });
     _refreshForSession();
+
+    // Un gérant qui vient de créer son compte n'a encore aucun salon : on
+    // l'emmène droit à la création plutôt que sur un accueil de client, où
+    // il chercherait longtemps.
+    if (wasPro && _auth.context?.ownedSalonId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        Navigator.of(context).push(MaterialPageRoute(
+          builder: (_) => const CreateSalonScreen(),
+        ));
+      });
+    }
   }
 
   /// Recharge ce qui dépend du compte connecté.
@@ -218,18 +249,32 @@ class _AppShellState extends State<_AppShell> {
       case _Screen.landing:
         return LandingScreen(
           key: const ValueKey('landing'),
-          onSignIn: () => setState(() => _screen = _Screen.auth),
-          onSignUp: () => setState(() => _screen = _Screen.auth),
+          onSignIn: () => setState(() {
+            _proSignup = false;
+            _screen = _Screen.auth;
+          }),
+          onSignUp: () => setState(() {
+            _proSignup = false;
+            _screen = _Screen.auth;
+          }),
+          onSignUpPro: () => setState(() {
+            _proSignup = true;
+            _screen = _Screen.auth;
+          }),
           onGuest: () {
             _auth.continueAsGuest();
-            setState(() { _screen = _Screen.main; _navIndex = 0; });
+            setState(() { _screen = _Screen.main; _tab = tabsFor(_auth.role).first; });
           },
         );
       case _Screen.auth:
         return AuthScreen(
           key: const ValueKey('auth'),
+          isPro: _proSignup,
           onSuccess: _onAuthSuccess,
-          onBack: () => setState(() => _screen = _Screen.landing),
+          onBack: () => setState(() {
+            _proSignup = false;
+            _screen = _Screen.landing;
+          }),
         );
       case _Screen.styleDna:
         return StyleDnaScreen(
@@ -281,6 +326,19 @@ class _AppShellState extends State<_AppShell> {
     final unread = context.watch<NotificationsController>().unread;
     final role = context.watch<AuthController>().role;
 
+    // Le changement de rôle vient du profil, écran présent dans les trois
+    // barres : on y reste. Un onglet absent du nouveau rôle — « موضة » côté
+    // client — retombe sur son accueil, au lieu d'un écran vide.
+    if (_lastRole != role) {
+      _lastRole = role;
+      final target = tabAfterRoleChange(_tab, role);
+      if (target != _tab) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _tab = target);
+        });
+      }
+    }
+
     return Scaffold(
       key: const ValueKey('main'),
       backgroundColor: AppColors.bg,
@@ -295,8 +353,9 @@ class _AppShellState extends State<_AppShell> {
               badgeCount: unread,
               isGuest: context.watch<AuthController>().status != AuthStatus.loggedIn,
               onTap: (i) {
-                setState(() => _navIndex = i);
-                if (i == _notificationsIndex) {
+                final tab = tabsFor(role)[i];
+                setState(() => _tab = tab);
+                if (tab == LamssaTab.notifications) {
                   context.read<NotificationsController>().load();
                 }
               },
@@ -307,28 +366,26 @@ class _AppShellState extends State<_AppShell> {
     );
   }
 
-  Widget _buildMainContent(AppRole role) {
-    switch (role) {
-      case AppRole.client:   return _clientScreen();
-      case AppRole.owner:    return _ownerScreen();
-      case AppRole.coiffeur: return _coiffeurScreen();
-    }
-  }
-
-  Widget _clientScreen() {
-    switch (_navIndex) {
-      case 0: return HomeScreen(
-        onGoSalon: _goSalon, onGoCoiffeur: _goCoiffeur,
-        onNav: (i) => setState(() => _navIndex = i),
-        onStyleDna: _goStyleDna,
-      );
-      case 1: return ExploreScreen(onGoSalon: _goSalon);
-      case 2: return TrendingScreen(onGoStaff: _goStaffById);
-      case 3: return const NotificationsScreen();
-      case 4: return ProfileScreen(onSignedOut: _onSignedOut);
-      default: return const SizedBox();
-    }
-  }
+  /// Un seul aiguillage pour tous les rôles : l'onglet dit ce qu'il faut
+  /// afficher, indépendamment de sa position dans la barre.
+  Widget _buildMainContent(AppRole role) => switch (_tab) {
+        LamssaTab.home => role == AppRole.owner
+            ? OwnerDashboardScreen(
+                onNav: (_) => setState(() => _tab = LamssaTab.dashboard))
+            : HomeScreen(
+                onGoSalon: _goSalon,
+                onGoCoiffeur: _goCoiffeur,
+                onNav: (i) => setState(() => _tab = tabsFor(role)[i]),
+                onStyleDna: _goStyleDna,
+              ),
+        LamssaTab.explore => ExploreScreen(onGoSalon: _goSalon),
+        LamssaTab.trending => TrendingScreen(onGoStaff: _goStaffById),
+        LamssaTab.dashboard => const CaisseScreen(),
+        LamssaTab.agenda => const CoiffeurDashboardScreen(),
+        LamssaTab.cash => const CoiffeurDashboardScreen(showAgendaOnly: true),
+        LamssaTab.notifications => const NotificationsScreen(),
+        LamssaTab.profile => ProfileScreen(onSignedOut: _onSignedOut),
+      };
 
   /// Depuis le fil « En vogue » on n'a que l'identifiant du coiffeur : on charge
   /// son profil avant d'ouvrir l'écran, sinon la réservation partirait sans
@@ -344,26 +401,6 @@ class _AppShellState extends State<_AppShell> {
     }
   }
 
-  Widget _ownerScreen() {
-    switch (_navIndex) {
-      case 0: return OwnerDashboardScreen(onNav: (i) => setState(() => _navIndex = i));
-      case 1: return const CaisseScreen();
-      case 2: return const NotificationsScreen();
-      case 3: return ProfileScreen(onSignedOut: _onSignedOut);
-      default: return const SizedBox();
-    }
-  }
-
-  Widget _coiffeurScreen() {
-    switch (_navIndex) {
-      case 0: return const CoiffeurDashboardScreen();
-      case 1: return const CoiffeurDashboardScreen(showAgendaOnly: true);
-      case 2: return const NotificationsScreen();
-      case 3: return ProfileScreen(onSignedOut: _onSignedOut);
-      default: return const SizedBox();
-    }
-  }
-
   void _onSignedOut() {
     context.read<NotificationsController>().reset();
     // Sans ça, les cœurs « aimé » du compte précédent resteraient allumés
@@ -372,7 +409,7 @@ class _AppShellState extends State<_AppShell> {
     context.read<MyPortfolioController>().reset();
     setState(() {
       _screen = _Screen.landing;
-      _navIndex = 0;
+      _tab = LamssaTab.home;
       _currentSalon = null;
       _currentCoiffeur = null;
       _inBooking = false;
@@ -424,7 +461,7 @@ class _AppShellState extends State<_AppShell> {
                       _confirmedBooking = null;
                       _currentSalon = null;
                       _currentCoiffeur = null;
-                      _navIndex = 0;
+                      _tab = LamssaTab.home;
                     });
                   },
                   child: Text('الرئيسية',

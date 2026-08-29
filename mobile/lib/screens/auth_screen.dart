@@ -13,10 +13,20 @@ import '../widgets/common_widgets.dart';
 /// Connexion par OTP SMS (§3.1) : numéro de téléphone puis code à 6 chiffres.
 /// Pas de mot de passe — c'est le parcours retenu au cahier des charges.
 class AuthScreen extends StatefulWidget {
-  const AuthScreen({super.key, required this.onSuccess, required this.onBack});
+  const AuthScreen({
+    super.key,
+    required this.onSuccess,
+    required this.onBack,
+    this.isPro = false,
+  });
 
   final VoidCallback onSuccess;
   final VoidCallback onBack;
+
+  /// Inscription d'un gérant. Le tunnel est identique — même compte, même OTP,
+  /// le rôle vient du serveur — mais l'écran doit dire où l'on va, sinon le
+  /// professionnel croit s'être trompé de parcours.
+  final bool isPro;
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -152,10 +162,13 @@ class _AuthScreenState extends State<AuthScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 20),
-          Text('أهلا بيك 👋', style: AppTextStyle.playfair(size: 32)),
+          Text(widget.isPro ? 'سجّل صالونك 💈' : 'أهلا بيك 👋',
+              style: AppTextStyle.playfair(size: 32)),
           const SizedBox(height: 10),
           Text(
-            'Entre ton numéro, on t’envoie un code par SMS.',
+            widget.isPro
+                ? 'نفس الحساب — بعد الكود، نعمرو معطيات الصالون.'
+                : 'Entre ton numéro, on t’envoie un code par SMS.',
             style: AppTextStyle.dmSans(color: AppColors.sub, size: 14),
           ),
           const SizedBox(height: 32),

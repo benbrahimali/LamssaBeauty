@@ -3,6 +3,75 @@ import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../data/models.dart';
 
+/// Onglets de l'app, nommés plutôt que numérotés.
+///
+/// Les rôles n'ont pas le même nombre d'onglets — le client en a cinq, les
+/// professionnels quatre. Avec de simples index, changer de rôle depuis le
+/// profil (index 4) envoyait le gérant sur un onglet inexistant : écran vide.
+/// Un onglet identifié se retrouve dans l'autre rôle, ou retombe sur l'accueil.
+enum LamssaTab {
+  home,
+  explore,
+  trending,
+  dashboard,
+  agenda,
+  cash,
+  notifications,
+  profile,
+}
+
+/// Onglets d'un rôle, dans l'ordre d'affichage.
+List<LamssaTab> tabsFor(AppRole role) => switch (role) {
+      AppRole.client => const [
+          LamssaTab.home,
+          LamssaTab.explore,
+          LamssaTab.trending,
+          LamssaTab.notifications,
+          LamssaTab.profile,
+        ],
+      AppRole.owner => const [
+          LamssaTab.home,
+          LamssaTab.dashboard,
+          LamssaTab.notifications,
+          LamssaTab.profile,
+        ],
+      AppRole.coiffeur => const [
+          LamssaTab.agenda,
+          LamssaTab.cash,
+          LamssaTab.notifications,
+          LamssaTab.profile,
+        ],
+    };
+
+/// L'onglet équivalent dans un autre rôle, ou l'accueil de ce rôle.
+///
+/// « Profil » existe partout : basculer depuis cet écran doit y rester, c'est
+/// de là que part le changement de rôle.
+LamssaTab tabAfterRoleChange(LamssaTab current, AppRole role) {
+  final tabs = tabsFor(role);
+  return tabs.contains(current) ? current : tabs.first;
+}
+
+_NavItemData _itemFor(LamssaTab tab, {required bool isGuest}) => switch (tab) {
+      LamssaTab.home =>
+        const _NavItemData(icon: Icons.home_rounded, label: 'الرئيسية'),
+      LamssaTab.explore =>
+        const _NavItemData(icon: Icons.search_rounded, label: 'اكتشف'),
+      LamssaTab.trending => const _NavItemData(
+          icon: Icons.local_fire_department_rounded, label: 'موضة'),
+      LamssaTab.dashboard =>
+        const _NavItemData(icon: Icons.bar_chart_rounded, label: 'داشبورد'),
+      LamssaTab.agenda =>
+        const _NavItemData(icon: Icons.calendar_today_rounded, label: 'مواعيدي'),
+      LamssaTab.cash =>
+        const _NavItemData(icon: Icons.content_cut_rounded, label: 'كاستي'),
+      LamssaTab.notifications => const _NavItemData(
+          icon: Icons.notifications_rounded, label: 'إشعارات', hasBadge: true),
+      LamssaTab.profile => isGuest
+          ? const _NavItemData(icon: Icons.person_add_rounded, label: 'تسجيل')
+          : const _NavItemData(icon: Icons.person_rounded, label: 'حسابي'),
+    };
+
 class LamssaBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
@@ -65,37 +134,9 @@ class LamssaBottomNav extends StatelessWidget {
     );
   }
 
-  List<_NavItemData> _getItems() {
-    switch (role) {
-      // Le client a un onglet de plus : le fil « En vogue » (§8.3). Les index
-      // ne sont donc pas alignés entre les rôles — voir `_notificationsIndex`
-      // dans main.dart.
-      case AppRole.client:
-        return [
-          const _NavItemData(icon: Icons.home_rounded, label: 'الرئيسية'),
-          const _NavItemData(icon: Icons.search_rounded, label: 'اكتشف'),
-          const _NavItemData(icon: Icons.local_fire_department_rounded, label: 'موضة'),
-          const _NavItemData(icon: Icons.notifications_rounded, label: 'إشعارات', hasBadge: true),
-          isGuest
-              ? const _NavItemData(icon: Icons.person_add_rounded, label: 'تسجيل')
-              : const _NavItemData(icon: Icons.person_rounded, label: 'حسابي'),
-        ];
-      case AppRole.owner:
-        return [
-          const _NavItemData(icon: Icons.home_rounded, label: 'الرئيسية'),
-          const _NavItemData(icon: Icons.bar_chart_rounded, label: 'داشبورد'),
-          const _NavItemData(icon: Icons.notifications_rounded, label: 'إشعارات', hasBadge: true),
-          const _NavItemData(icon: Icons.person_rounded, label: 'حسابي'),
-        ];
-      case AppRole.coiffeur:
-        return [
-          const _NavItemData(icon: Icons.calendar_today_rounded, label: 'مواعيدي'),
-          const _NavItemData(icon: Icons.content_cut_rounded, label: 'كاستي'),
-          const _NavItemData(icon: Icons.notifications_rounded, label: 'إشعارات', hasBadge: true),
-          const _NavItemData(icon: Icons.person_rounded, label: 'بروفايل'),
-        ];
-    }
-  }
+  List<_NavItemData> _getItems() => tabsFor(role)
+      .map((tab) => _itemFor(tab, isGuest: isGuest))
+      .toList();
 
   ColorFilter _colorFilter() => const ColorFilter.mode(Colors.transparent, BlendMode.multiply);
 }
