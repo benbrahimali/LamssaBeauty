@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../core/api_exception.dart';
@@ -8,6 +7,7 @@ import '../data/models.dart';
 import '../data/repositories/salon_admin_repository.dart';
 import '../state/auth_controller.dart';
 import '../theme/app_theme.dart';
+import '../core/location.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 
@@ -52,25 +52,12 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
   Future<void> _locate() async {
     setState(() => _locating = true);
     try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        if (mounted) {
-          showAppSnack(context, 'Autorise la localisation pour situer le salon');
-        }
-        return;
-      }
-      final position = await Geolocator.getCurrentPosition();
-      if (!mounted) return;
+      final position = await resolvePosition(context);
+      if (!mounted || position == null) return;
       setState(() {
         _lat = position.latitude;
         _lng = position.longitude;
       });
-    } catch (_) {
-      if (mounted) showAppSnack(context, 'Position indisponible');
     } finally {
       if (mounted) setState(() => _locating = false);
     }

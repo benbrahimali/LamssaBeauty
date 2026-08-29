@@ -8,9 +8,12 @@ import '../state/auth_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import 'create_salon_screen.dart';
+import 'edit_profile_screen.dart';
+import 'help_screen.dart';
 import 'manage_salon_screen.dart';
 import 'my_bookings_screen.dart';
 import 'my_portfolio_screen.dart';
+import 'privacy_screen.dart';
 import 'salon_qr_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -360,14 +363,18 @@ class ProfileScreen extends StatelessWidget {
       // Modifier un compte ou régler sa confidentialité n'a aucun sens tant
       // qu'il n'y en a pas : ces entrées ne mèneraient nulle part.
       if (loggedIn) ...[
-        {'icon': Icons.person_rounded, 'label': 'تعديل الحساب', 'action': 'soon'},
+        {
+          'icon': Icons.person_rounded,
+          'label': 'تعديل الحساب',
+          'action': 'edit_profile'
+        },
         {
           'icon': Icons.lock_rounded,
           'label': 'الأمان والخصوصية',
-          'action': 'soon'
+          'action': 'privacy'
         },
       ],
-      {'icon': Icons.help_rounded, 'label': 'المساعدة', 'action': 'soon'},
+      {'icon': Icons.help_rounded, 'label': 'المساعدة', 'action': 'help'},
       {
         'icon': loggedIn ? Icons.logout_rounded : Icons.login_rounded,
         'label': loggedIn ? 'تسجيل الخروج' : 'عندي حساب — دخول',
@@ -413,6 +420,18 @@ class ProfileScreen extends StatelessWidget {
                       builder: (_) => MyPortfolioScreen(
                         staffId: auth.context!.staffId!,
                       ),
+                    ));
+                  case 'edit_profile':
+                    await Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const EditProfileScreen(),
+                    ));
+                  case 'privacy':
+                    await Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const PrivacyScreen(),
+                    ));
+                  case 'help':
+                    await Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const HelpScreen(),
                     ));
                   case 'salon_qr':
                     await Navigator.of(context).push(MaterialPageRoute(

@@ -102,6 +102,21 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  /// Met à jour le profil (nom, langue) et recharge le contexte.
+  ///
+  /// Renvoie le message d'erreur, ou null si tout s'est bien passé.
+  Future<String?> updateProfile({String? name, String? locale}) async {
+    try {
+      await _repo.updateProfile(name: name, locale: locale);
+      // On relit plutôt que de patcher l'objet local : le serveur normalise
+      // (nom vide, locale inconnue) et reste la source de vérité.
+      await refreshContext();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    }
+  }
+
   /// Change la langue de l'interface (§2.5) et la persiste côté serveur —
   /// c'est aussi celle des SMS et notifications envoyés au compte.
   ///

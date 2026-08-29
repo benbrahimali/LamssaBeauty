@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +7,7 @@ import '../data/models.dart';
 import '../state/salons_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/salon_code_sheet.dart';
+import '../core/location.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 
@@ -46,17 +46,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
   Future<void> _locateMe() async {
     setState(() => _locating = true);
     try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        if (mounted) showAppSnack(context, 'Autorise la localisation pour trier par distance');
-        return;
-      }
-      final position = await Geolocator.getCurrentPosition();
-      if (!mounted) return;
+      final position = await resolvePosition(context);
+      if (!mounted || position == null) return;
 
       final salons = context.read<SalonsController>();
       salons.setPosition(position.latitude, position.longitude);
@@ -65,8 +56,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
         LatLng(position.latitude, position.longitude),
         14,
       ));
-    } catch (_) {
-      if (mounted) showAppSnack(context, 'Position indisponible');
     } finally {
       if (mounted) setState(() => _locating = false);
     }

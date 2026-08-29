@@ -4,6 +4,22 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Position : recherche « près de moi » (§3.2) et localisation du salon à
+         sa création. Sans ces déclarations, geolocator reçoit un refus
+         immédiat — l'utilisateur ne voit même pas la demande d'autorisation. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
+    <!-- Selfie de Style DNA, pris directement à la caméra. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+
+    <!-- Android 13+ : photos du portfolio et vidéos des reels. Le sélecteur
+         système n'exige rien, mais lire un média choisi passe par elles. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+
     <application
         android:label="Lamssa"
         android:name="${applicationName}"
