@@ -117,8 +117,23 @@ async def _call(parts: list[dict]) -> bytes:
 
     if resp.status_code >= 400:
         log.warning("Gemini %s: %s", resp.status_code, resp.text[:300])
-        # 400 côté fournisseur = souvent un filtre de sécurité : on ne renvoie
-        # pas son message brut au client, il n'est pas rédigé pour lui.
+        # Le message renvoyé doit correspondre à ce que l'utilisateur peut
+        # faire. « Essaie une autre coupe » sur un quota épuisé est un mauvais
+        # conseil : changer de coupe ne débloque rien, seule l'attente ou un
+        # paiement le fera.
+        if resp.status_code == 429:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "Le générateur d'images a atteint sa limite. Réessaie plus tard.",
+            )
+        if resp.status_code in (401, 403):
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "La génération d'images n'est pas disponible sur ce serveur.",
+            )
+        # 400 côté fournisseur = souvent un filtre de sécurité : là, changer de
+        # coupe a du sens. On ne renvoie pas son message brut, il n'est pas
+        # rédigé pour un client.
         raise HTTPException(
             status.HTTP_502_BAD_GATEWAY,
             "L'image n'a pas pu être générée. Essaie une autre coupe.",

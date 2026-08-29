@@ -146,3 +146,45 @@ def test_l_essayage_demande_de_preserver_le_visage():
     prompt = gen.TRYON_PROMPT.format(style="Fade", details="")
     for exigence in ("visage", "expression", "peau"):
         assert exigence in prompt.lower()
+
+
+# ── Traduction des erreurs du fournisseur ────────────────────────────────────
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "statut_fournisseur,statut_attendu,extrait",
+    [
+        (429, 429, "plus tard"),      # quota épuisé : attendre, pas changer de coupe
+        (403, 503, "disponible"),     # clé refusée : l'app doit masquer la fonction
+        (401, 503, "disponible"),
+        (400, 502, "autre coupe"),    # filtre de sécurité : changer d'invite aide
+        (500, 502, "autre coupe"),
+    ],
+)
+async def test_l_erreur_rendue_correspond_a_ce_que_l_utilisateur_peut_faire(
+    monkeypatch, statut_fournisseur, statut_attendu, extrait
+):
+    """Un message qui conseille l'impossible est pire que pas de message."""
+    import httpx
+
+    _configure_gemini()
+
+    class FauxClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, *a, **k):
+            return httpx.Response(statut_fournisseur, json={"error": {"message": "x"}})
+
+    monkeypatch.setattr(gen.httpx, "AsyncClient", lambda *a, **k: FauxClient())
+
+    with pytest.raises(HTTPException) as exc:
+        await gen.preview("Fade")
+    assert exc.value.status_code == statut_attendu
+    assert extrait in exc.value.detail
+
+
+def _configure_gemini():
+    settings.GEMINI_API_KEY = "test-key"
