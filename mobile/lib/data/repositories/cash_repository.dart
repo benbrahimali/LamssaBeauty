@@ -46,6 +46,66 @@ class CashRepository {
           query: {'salon_id': salonId},
           body: {'label': label, 'amount': amount, 'category': category});
 
+  /// Compte de résultat du salon (§3.4).
+  ///
+  /// Sans période, le mois en cours : c'est la maille sur laquelle un loyer et
+  /// des salaires ont un sens.
+  Future<Pnl> pnl(String salonId, {DateTime? start, DateTime? end}) async {
+    final data = await _api.get('/cash/pnl', query: {
+      'salon_id': salonId,
+      if (start != null) 'start': _isoDay(start),
+      if (end != null) 'end': _isoDay(end),
+    }) as Map<String, dynamic>;
+    return Pnl.fromJson(data);
+  }
+
+  /// Charges fixes du salon, avec leur équivalent mensuel.
+  Future<({List<RecurringCharge> charges, double monthlyEquivalent})> charges(
+    String salonId, {
+    bool includeInactive = false,
+  }) async {
+    final data = await _api.get('/cash/charges', query: {
+      'salon_id': salonId,
+      if (includeInactive) 'include_inactive': true,
+    }) as Map<String, dynamic>;
+    return (
+      charges: ((data['charges'] as List?) ?? const [])
+          .map((e) => RecurringCharge.fromJson(Map<String, dynamic>.from(e as Map)))
+          .toList(),
+      monthlyEquivalent: (data['monthly_equivalent'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  Future<RecurringCharge> addCharge(
+    String salonId, {
+    required String label,
+    required double amount,
+    required String period,
+    String category = 'autre',
+  }) async {
+    final data = await _api.post('/cash/charges',
+        query: {'salon_id': salonId},
+        body: {
+          'label': label,
+          'amount': amount,
+          'period': period,
+          'category': category,
+        }) as Map<String, dynamic>;
+    return RecurringCharge.fromJson(data);
+  }
+
+  /// Désactive plutôt que supprimer : les mois déjà analysés gardent leurs
+  /// comptes justes.
+  Future<RecurringCharge> setChargeActive(String chargeId, bool active) async {
+    final data = await _api.patch('/cash/charges/$chargeId',
+        body: {'active': active}) as Map<String, dynamic>;
+    return RecurringCharge.fromJson(data);
+  }
+
+  /// À réserver aux saisies erronées — une charge réelle se désactive.
+  Future<void> deleteCharge(String chargeId) =>
+      _api.delete('/cash/charges/$chargeId');
+
   /// Paie de la semaine, par coiffeur (§3.4).
   ///
   /// Le montant qui compte est `balance` : ce qui reste à remettre en main
@@ -309,5 +369,91 @@ class PayrollLine {
         balance: (json['balance'] as num?)?.toDouble() ?? 0,
         weekStart: json['week_start']?.toString() ?? '',
         weekEnd: json['week_end']?.toString() ?? '',
+      );
+}
+
+
+/// Une charge fixe du salon : loyer, salaire, abonnement, taxe.
+class RecurringCharge {
+  const RecurringCharge({
+    required this.id,
+    required this.label,
+    required this.amount,
+    this.category = 'autre',
+    this.period = 'monthly',
+    this.active = true,
+  });
+
+  final String id;
+  final String label;
+  final double amount;
+  final String category;
+  final String period;
+  final bool active;
+
+  String get periodLabel => switch (period) {
+        'weekly' => 'كل جمعة',
+        'yearly' => 'كل عام',
+        _ => 'كل شهر',
+      };
+
+  factory RecurringCharge.fromJson(Map<String, dynamic> json) => RecurringCharge(
+        id: (json['id'] ?? json['_id'])?.toString() ?? '',
+        label: json['label']?.toString() ?? '',
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        category: json['category']?.toString() ?? 'autre',
+        period: json['period']?.toString() ?? 'monthly',
+        active: json['active'] != false,
+      );
+}
+
+/// Compte de résultat : ce qu'il reste au salon une fois tout payé.
+class Pnl {
+  const Pnl({
+    this.days = 0,
+    this.revenue = 0,
+    this.staffShare = 0,
+    this.grossMargin = 0,
+    this.expenses = 0,
+    this.recurringCharges = 0,
+    this.result = 0,
+    this.marginPct = 0,
+    this.tipsCollected = 0,
+    this.byCategory = const {},
+    this.transactionCount = 0,
+  });
+
+  final double days;
+  final double revenue;
+  final double staffShare;
+  final double grossMargin;
+  final double expenses;
+  final double recurringCharges;
+
+  /// Peut être négatif : c'est tout l'intérêt de le calculer.
+  final double result;
+  final double marginPct;
+
+  /// Encaissés pour l'équipe, jamais comptés en revenu du salon.
+  final double tipsCollected;
+  final Map<String, double> byCategory;
+  final int transactionCount;
+
+  bool get isLoss => result < 0;
+
+  factory Pnl.fromJson(Map<String, dynamic> json) => Pnl(
+        days: (json['days'] as num?)?.toDouble() ?? 0,
+        revenue: (json['revenue'] as num?)?.toDouble() ?? 0,
+        staffShare: (json['staff_share'] as num?)?.toDouble() ?? 0,
+        grossMargin: (json['gross_margin'] as num?)?.toDouble() ?? 0,
+        expenses: (json['expenses'] as num?)?.toDouble() ?? 0,
+        recurringCharges: (json['recurring_charges'] as num?)?.toDouble() ?? 0,
+        result: (json['result'] as num?)?.toDouble() ?? 0,
+        marginPct: (json['margin_pct'] as num?)?.toDouble() ?? 0,
+        tipsCollected: (json['tips_collected'] as num?)?.toDouble() ?? 0,
+        byCategory: ((json['by_category'] as Map?) ?? const {}).map(
+          (k, v) => MapEntry(k.toString(), (v as num?)?.toDouble() ?? 0),
+        ),
+        transactionCount: (json['transaction_count'] as num?)?.toInt() ?? 0,
       );
 }

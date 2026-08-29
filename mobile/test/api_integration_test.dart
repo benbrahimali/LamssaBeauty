@@ -623,6 +623,63 @@ void main() {
       expect(advances.first.isPending, isTrue);
     });
 
+    test('une charge fixe fait baisser le résultat du mois', () async {
+      // Le cas qui justifie tout le module : la caisse peut être positive et
+      // le salon perdre de l'argent une fois le loyer payé.
+      final avant = await cash.pnl(salonId);
+
+      final charge = await cash.addCharge(
+        salonId,
+        label: 'Loyer test',
+        amount: 900,
+        period: 'monthly',
+        category: 'loyer',
+      );
+      addTearDown(() => cash.deleteCharge(charge.id));
+
+      final apres = await cash.pnl(salonId);
+      expect(apres.recurringCharges, greaterThan(avant.recurringCharges),
+          reason: 'la charge doit peser sur le mois');
+      expect(apres.result, lessThan(avant.result));
+      // Le chiffre d'affaires ne bouge pas : une charge n'est pas une vente.
+      expect(apres.revenue, closeTo(avant.revenue, 0.01));
+    });
+
+    test('les comptes du résultat s’additionnent', () async {
+      final p = await cash.pnl(salonId);
+
+      expect(p.grossMargin, closeTo(p.revenue - p.staffShare, 0.02),
+          reason: 'marge = chiffre − part équipe');
+      expect(p.result,
+          closeTo(p.grossMargin - p.expenses - p.recurringCharges, 0.02),
+          reason: 'résultat = marge − dépenses − charges');
+    });
+
+    test('une charge désactivée cesse de peser', () async {
+      final charge = await cash.addCharge(
+        salonId,
+        label: 'Abonnement test',
+        amount: 300,
+        period: 'monthly',
+      );
+      addTearDown(() => cash.deleteCharge(charge.id));
+
+      final avec = await cash.pnl(salonId);
+      await cash.setChargeActive(charge.id, false);
+      final sans = await cash.pnl(salonId);
+
+      expect(sans.recurringCharges, lessThan(avec.recurringCharges));
+    });
+
+    test('un gérant ne voit pas le résultat du salon d’un autre', () async {
+      await login('+21699000001');
+      await expectLater(
+        cash.pnl(salonId),
+        throwsA(isA<ApiException>().having((e) => e.statusCode, 'status', 403)),
+      );
+      await login(ownerPhone);
+    });
+
     test('la paie de la semaine déduit les tséb9as accordées', () async {
       // Circuit complet : le coiffeur demande, le gérant accorde, la paie
       // baisse d'autant. C'est la seule vérification qui prouve que la tséb9a

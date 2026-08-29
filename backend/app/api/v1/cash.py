@@ -8,15 +8,18 @@ from fastapi.responses import FileResponse
 
 from app.core.deps import my_staff_profile
 from app.core.security import require_role
-from app.core.timeutils import local_week_bounds, to_local, utcnow
-from app.models.documents import CashClosure, Expense, Salon, StaffMember, User
+from app.core.timeutils import local_day_bounds, local_month_bounds, local_week_bounds, to_local, utcnow
+from app.models.documents import RecurringCharge, CashClosure, Expense, Salon, StaffMember, User
 from app.models.enums import NotificationType, Role
-from app.schemas.cash import ClosureCreate, ExpenseCreate
+from app.schemas.cash import RecurringChargeCreate, RecurringChargeUpdate, ClosureCreate, ExpenseCreate
 from app.services.cash_service import (
+    DAYS_PER_MONTH,
     close_day,
+    daily_cost,
     day_summary,
     monthly_report,
     payroll,
+    profit_and_loss,
     staff_day_summary,
     staff_month_balance,
 )
@@ -87,6 +90,107 @@ async def my_balance(
 ):
     now = to_local(utcnow())
     return await staff_month_balance(staff, year or now.year, month or now.month)
+
+
+@router.get("/pnl", summary="Compte de résultat du salon sur une période")
+async def salon_pnl(
+    salon_id: PydanticObjectId,
+    start: date | None = None,
+    end: date | None = None,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    """Ce qu'il reste au salon une fois l'équipe payée et les charges couvertes.
+
+    Par défaut, le mois en cours : c'est la maille sur laquelle un loyer et des
+    salaires ont un sens. Les charges fixes sont comptées au prorata des jours
+    de la période — sinon la semaine où tombe le loyer paraîtrait
+    catastrophique et les trois autres, excellentes.
+    """
+    salon = await _my_salon(salon_id, user)
+    now = to_local(utcnow())
+    if start and end:
+        debut, _ = local_day_bounds(start)
+        _, fin = local_day_bounds(end)
+    else:
+        debut, fin = local_month_bounds(now.year, now.month)
+
+    return await profit_and_loss(salon.id, debut, fin)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Charges fixes du salon (§3.4)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/charges", summary="Charges fixes du salon")
+async def list_charges(
+    salon_id: PydanticObjectId,
+    include_inactive: bool = False,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    salon = await _my_salon(salon_id, user)
+    query: dict = {"salon_id": salon.id}
+    if not include_inactive:
+        query["active"] = True
+    charges = await RecurringCharge.find(query).sort("-amount").to_list()
+
+    # Le total mensuel équivalent est le chiffre que le gérant a en tête :
+    # « il me faut tant par mois avant de gagner quoi que ce soit ».
+    mensuel = round(
+        sum(daily_cost(c.amount, c.period) * DAYS_PER_MONTH for c in charges), 2
+    )
+    return {"charges": charges, "monthly_equivalent": mensuel}
+
+
+@router.post("/charges", status_code=201, summary="Ajouter une charge fixe")
+async def create_charge(
+    body: RecurringChargeCreate,
+    salon_id: PydanticObjectId,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    salon = await _my_salon(salon_id, user)
+    charge = RecurringCharge(salon_id=salon.id, **body.model_dump())
+    await charge.insert()
+    return charge
+
+
+@router.patch("/charges/{charge_id}", summary="Modifier une charge fixe")
+async def update_charge(
+    charge_id: PydanticObjectId,
+    body: RecurringChargeUpdate,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    charge = await RecurringCharge.get(charge_id)
+    if not charge:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Charge introuvable")
+    await _my_salon(charge.salon_id, user)
+
+    data = body.model_dump(exclude_none=True)
+    for champ, valeur in data.items():
+        setattr(charge, champ, valeur)
+    if data.get("active") is False and charge.ended_at is None:
+        # Date de fin posée à la désactivation : les périodes antérieures
+        # continuent de compter la charge, les suivantes non.
+        charge.ended_at = utcnow()
+    elif data.get("active") is True:
+        charge.ended_at = None
+    await charge.save()
+    return charge
+
+
+@router.delete("/charges/{charge_id}", summary="Supprimer une charge fixe")
+async def delete_charge(
+    charge_id: PydanticObjectId, user: User = Depends(require_role(Role.OWNER))
+):
+    """Suppression définitive — à réserver aux saisies erronées.
+
+    Pour une charge qui a réellement existé, la désactivation vaut mieux :
+    elle garde les comptes des mois passés justes.
+    """
+    charge = await RecurringCharge.get(charge_id)
+    if not charge:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Charge introuvable")
+    await _my_salon(charge.salon_id, user)
+    await charge.delete()
+    return {"removed": str(charge_id)}
 
 
 @router.get("/payroll", summary="Paie de la semaine, par coiffeur")

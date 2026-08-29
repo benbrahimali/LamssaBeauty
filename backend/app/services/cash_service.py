@@ -11,12 +11,13 @@ from app.models.documents import (
     Advance,
     CashClosure,
     Expense,
+    RecurringCharge,
     Salon,
     StaffMember,
     Transaction,
     User,
 )
-from app.models.enums import AdvanceStatus
+from app.models.enums import AdvanceStatus, ChargePeriod
 
 
 def _blank_staff_row() -> dict:
@@ -236,6 +237,107 @@ async def monthly_report(salon_id: PydanticObjectId, year: int, month: int) -> d
             CashClosure.day >= start.date(),
             CashClosure.day < end.date(),
         ).count(),
+    }
+
+
+#: Jours moyens d'un mois et d'une année, décimales comprises : utiliser 30 et
+#: 365 ferait dériver le prorata de 6 jours par an, soit un loyer sous-compté.
+DAYS_PER_MONTH = 365.25 / 12
+DAYS_PER_YEAR = 365.25
+
+
+def daily_cost(amount: float, period: ChargePeriod) -> float:
+    """Coût journalier d'une charge, quel que soit son rythme.
+
+    Ramener toutes les charges au jour est ce qui rend les périodes
+    comparables : sans ça, la semaine où le loyer tombe paraîtrait
+    catastrophique et les trois autres, excellentes.
+    """
+    match period:
+        case ChargePeriod.WEEKLY:
+            return amount / 7
+        case ChargePeriod.YEARLY:
+            return amount / DAYS_PER_YEAR
+        case _:
+            return amount / DAYS_PER_MONTH
+
+
+async def profit_and_loss(
+    salon_id: PydanticObjectId, start: datetime, end: datetime
+) -> dict:
+    """Compte de résultat du salon sur une période (§3.4).
+
+    Ce que la caisse du jour ne dit pas : elle montre ce qui est entré, pas ce
+    qu'il reste une fois l'équipe payée et les charges fixes couvertes.
+
+    Les pourboires sont exclus du résultat. Ils transitent par la caisse quand
+    le client paie par carte, mais ils appartiennent à l'employé : les compter
+    en revenu gonflerait artificiellement le résultat du salon.
+    """
+    txs = await Transaction.find(
+        {"salon_id": salon_id, "paid_at": {"$gte": start, "$lt": end}}
+    ).to_list()
+    expenses = await Expense.find(
+        {"salon_id": salon_id, "spent_at": {"$gte": start, "$lt": end}}
+    ).to_list()
+    charges = await RecurringCharge.find(
+        {
+            "salon_id": salon_id,
+            "active": True,
+            "started_at": {"$lt": end},
+            "$or": [{"ended_at": None}, {"ended_at": {"$gte": start}}],
+        }
+    ).to_list()
+
+    jours = max((end - start).total_seconds() / 86400, 0.0)
+
+    revenus = round(sum(t.amount for t in txs), 2)
+    part_equipe = round(sum(t.staff_share for t in txs), 2)
+    pourboires = round(sum(t.tip for t in txs), 2)
+    marge = round(revenus - part_equipe, 2)
+
+    par_categorie: dict[str, float] = {}
+    for e in expenses:
+        par_categorie[e.category] = round(
+            par_categorie.get(e.category, 0.0) + e.amount, 2
+        )
+
+    lignes_charges = []
+    for c in charges:
+        montant = round(daily_cost(c.amount, c.period) * jours, 2)
+        par_categorie[c.category] = round(par_categorie.get(c.category, 0.0) + montant, 2)
+        lignes_charges.append(
+            {
+                "id": str(c.id),
+                "label": c.label,
+                "category": c.category,
+                "period": c.period.value,
+                "amount": c.amount,
+                "prorated": montant,
+            }
+        )
+
+    depenses = round(sum(e.amount for e in expenses), 2)
+    charges_total = round(sum(l["prorated"] for l in lignes_charges), 2)
+    resultat = round(marge - depenses - charges_total, 2)
+
+    return {
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "days": round(jours, 2),
+        "revenue": revenus,
+        "staff_share": part_equipe,
+        "gross_margin": marge,
+        "expenses": depenses,
+        "recurring_charges": charges_total,
+        "result": resultat,
+        # Un résultat sans son taux ne dit pas s'il est bon : 500 DT sur
+        # 10 000 de chiffre n'a rien à voir avec 500 sur 1 500.
+        "margin_pct": round(100 * resultat / revenus, 1) if revenus else 0.0,
+        "tips_collected": pourboires,
+        "by_category": dict(sorted(par_categorie.items(), key=lambda kv: -kv[1])),
+        "charges": lignes_charges,
+        "transaction_count": len(txs),
     }
 
 

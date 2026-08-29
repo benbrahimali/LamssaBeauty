@@ -9,6 +9,7 @@ import '../state/auth_controller.dart';
 import '../state/cash_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
+import 'finance_screen.dart';
 import '../widgets/expenses_sheet.dart';
 import '../widgets/payroll_sheet.dart';
 import '../widgets/common_widgets.dart';
@@ -132,6 +133,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
             SliverToBoxAdapter(child: _buildHeader(cash)),
             SliverToBoxAdapter(child: _buildTotalCard(cash)),
             SliverToBoxAdapter(child: _buildWalkInButton(cash)),
+            SliverToBoxAdapter(child: _buildFinanceButton(cash)),
             SliverToBoxAdapter(child: _buildPayrollButton(cash)),
             SliverToBoxAdapter(child: _buildExpensesButton(cash)),
             SliverToBoxAdapter(child: _buildCloseButton(cash)),
@@ -349,6 +351,33 @@ class _CaisseScreenState extends State<CaisseScreen> {
 
   /// Accès à la paie de la semaine, à côté des dépenses : les deux répondent
   /// à la même question — combien sort réellement de la caisse.
+  /// Le compte de résultat : la caisse dit ce qui est entré, cet écran dit ce
+  /// qu'il reste une fois l'équipe payée et les charges couvertes.
+  Widget _buildFinanceButton(CashController cash) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: GestureDetector(
+        onTap: cash.salonId == null
+            ? null
+            : () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => FinanceScreen(salonId: cash.salonId!),
+                )),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: AppColors.teal.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.teal.withValues(alpha: 0.35)),
+          ),
+          alignment: Alignment.center,
+          child: Text('📊 الميزانية', style: AppTextStyle.dmSans(
+            size: 14, weight: FontWeight.w700, color: AppColors.teal,
+          )),
+        ),
+      ),
+    );
+  }
+
   Widget _buildPayrollButton(CashController cash) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),

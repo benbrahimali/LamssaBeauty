@@ -103,6 +103,13 @@ class NotificationType(str, Enum):
     NEW_REVIEW = "new_review"
 
 
+class ChargePeriod(str, Enum):
+    """Rythme d'une charge fixe du salon (§3.4)."""
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+    YEARLY = "yearly"
+
+
 class SubscriptionStatus(str, Enum):
     TRIAL = "trial"
     ACTIVE = "active"

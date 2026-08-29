@@ -3,6 +3,8 @@ from datetime import date, datetime
 from beanie import PydanticObjectId
 from pydantic import BaseModel, Field
 
+from app.models.enums import ChargePeriod
+
 
 class AdvanceCreate(BaseModel):
     """Demande de tséb9a par un membre du staff."""
@@ -55,3 +57,21 @@ class DayCashOut(BaseModel):
     by_staff: dict[str, StaffCashRow]
     closed: bool
     closure_id: str | None = None
+
+
+class RecurringChargeCreate(BaseModel):
+    """Une charge fixe telle que le gérant la décrit lui-même."""
+
+    label: str = Field(min_length=2, max_length=60)
+    amount: float = Field(gt=0)
+    category: str = "autre"
+    period: ChargePeriod = ChargePeriod.MONTHLY
+
+
+class RecurringChargeUpdate(BaseModel):
+    label: str | None = Field(default=None, min_length=2, max_length=60)
+    amount: float | None = Field(default=None, gt=0)
+    category: str | None = None
+    period: ChargePeriod | None = None
+    # Désactiver plutôt que supprimer : l'historique garde son sens.
+    active: bool | None = None

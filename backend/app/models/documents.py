@@ -8,6 +8,7 @@ from pymongo import IndexModel
 
 from app.models.enums import (
     AdvanceStatus,
+    ChargePeriod,
     BookingSource,
     BookingStatus,
     CommissionType,
@@ -87,6 +88,13 @@ class Salon(Document):
 
     # Caisse (§3.4)
     default_split_pct: float = 50.0
+
+    # Chaque salon nomme ses postes de dépense comme il les tient dans son
+    # cahier : imposer une liste unique obligerait à tout ranger dans « autre ».
+    expense_categories: list[str] = Field(
+        default_factory=lambda: ["produits", "loyer", "électricité", "eau",
+                                 "entretien", "taxes", "autre"]
+    )
     # Réservation (§3.3)
     cancellation_window_h: int = 2
     status: SalonStatus = SalonStatus.OPEN
@@ -426,6 +434,34 @@ class Reel(Document):
         ]
 
 
+class RecurringCharge(Document):
+    """Charge fixe du salon : loyer, salaire, abonnement, taxe (§3.4).
+
+    Chaque salon décrit ses propres charges avec leur rythme. Sans elles, le
+    « net » de la caisse ne dit rien du résultat réel : un salon peut encaisser
+    3 000 DT dans le mois et perdre de l'argent une fois le loyer payé.
+    """
+    salon_id: PydanticObjectId
+    label: str
+    amount: float
+    category: str = "autre"
+    period: ChargePeriod = ChargePeriod.MONTHLY
+
+    # Une charge supprimée fausserait l'historique : on la désactive, et les
+    # périodes déjà analysées gardent le montant qui s'y appliquait.
+    active: bool = True
+    started_at: datetime = Field(default_factory=utcnow)
+    ended_at: datetime | None = None
+
+    created_at: datetime = Field(default_factory=utcnow)
+
+    class Settings:
+        name = "recurring_charges"
+        indexes = [
+            IndexModel([("salon_id", pymongo.ASCENDING), ("active", pymongo.ASCENDING)]),
+        ]
+
+
 class Notification(Document):
     user_id: PydanticObjectId
     type: NotificationType
@@ -456,6 +492,7 @@ ALL_DOCUMENTS = [
     Payment,
     Review,
     PortfolioItem,
+    RecurringCharge,
     Reel,
     Notification,
 ]

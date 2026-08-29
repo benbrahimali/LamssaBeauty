@@ -70,6 +70,35 @@ pré-remplit le code OTP renvoyé par l'API et le code `000000` fonctionne toujo
 | 2.4 / 8.5 | Style DNA — analyse du selfie par modèle vision | ✅ | `services/style_dna_service.py`, `api/v1/style_dna.py` |
 | 2.4 | Liste d'attente, programme fidélité | ❌ V2 | — |
 
+### Gestion financière du gérant (§3.4)
+
+La caisse dit ce qui est entré ; le compte de résultat dit ce qu'il reste. Un
+salon peut encaisser 3 000 DT dans le mois et perdre de l'argent une fois le
+loyer payé — c'est ce que `GET /cash/pnl` rend visible :
+
+```
+chiffre d'affaires  −  part de l'équipe  =  marge brute
+marge brute  −  dépenses ponctuelles  −  charges fixes  =  résultat
+```
+
+Chaque salon décrit **ses propres charges** (`RecurringCharge`) avec ses
+libellés, ses catégories et son rythme — hebdomadaire, mensuel, annuel. Rien
+n'est imposé : un salon qui paie un loyer et une patente ne tient pas les mêmes
+comptes qu'un salon avec trois salariés fixes.
+
+Les charges sont ramenées au **coût journalier** puis comptées au prorata de la
+période. Sans ça, la semaine où tombe le loyer paraîtrait catastrophique et les
+trois autres, excellentes — le gérant ne pourrait comparer ses semaines. Le mois
+moyen vaut 365,25/12 jours et non 30 : l'écart représenterait six jours de
+charges par an, soit 180 DT sur un loyer de 900.
+
+Les **pourboires sont exclus du résultat**. Ils transitent par la caisse quand le
+client paie par carte, mais appartiennent à l'employé : les compter en revenu
+gonflerait le résultat du salon. Ils restent affichés à part.
+
+Une charge se **désactive**, elle ne se supprime pas : les mois déjà analysés
+gardent des comptes justes.
+
 ### Médias : Cloudinary, photos et reels (§3.2, §3.8)
 
 Photos de salon et **reels vidéo** passent par Cloudinary quand ses clés sont
@@ -172,14 +201,14 @@ l'accueil masque la carte : le reste de l'app fonctionne à l'identique.
 
 ```bash
 cd backend
-python -m pytest -q          # 192 tests unitaires, sans MongoDB ni Redis
+python -m pytest -q          # 237 tests unitaires, sans MongoDB ni Redis
 python -m tests.smoke_e2e    # 51 assertions bout en bout (mongo + redis requis)
 
 cd ../mobile
 flutter analyze                                  # 0 issue
-flutter test --exclude-tags integration          # 46 tests unitaires
+flutter test --exclude-tags integration          # 77 tests unitaires
 flutter test --tags integration \
-  --dart-define=API_BASE_URL=http://127.0.0.1:8000   # 39 tests contre l'API réelle
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000   # 45 tests contre l'API réelle
 ```
 
 Le cœur métier (split, créneaux, transitions, agrégation de caisse, normalisation
