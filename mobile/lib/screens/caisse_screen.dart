@@ -10,6 +10,7 @@ import '../state/cash_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import '../widgets/expenses_sheet.dart';
+import '../widgets/payroll_sheet.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/walk_in_sheet.dart';
 
@@ -131,6 +132,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
             SliverToBoxAdapter(child: _buildHeader(cash)),
             SliverToBoxAdapter(child: _buildTotalCard(cash)),
             SliverToBoxAdapter(child: _buildWalkInButton(cash)),
+            SliverToBoxAdapter(child: _buildPayrollButton(cash)),
             SliverToBoxAdapter(child: _buildExpensesButton(cash)),
             SliverToBoxAdapter(child: _buildCloseButton(cash)),
             SliverToBoxAdapter(child: _buildTabBar()),
@@ -343,6 +345,31 @@ class _CaisseScreenState extends State<CaisseScreen> {
     } on ApiException catch (e) {
       if (mounted) showAppSnack(context, e.message);
     }
+  }
+
+  /// Accès à la paie de la semaine, à côté des dépenses : les deux répondent
+  /// à la même question — combien sort réellement de la caisse.
+  Widget _buildPayrollButton(CashController cash) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: GestureDetector(
+        onTap: cash.salonId == null
+            ? null
+            : () => PayrollSheet.show(context, cash.salonId!),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: AppColors.gold.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+          ),
+          alignment: Alignment.center,
+          child: Text('💰 خلاص الأسبوع', style: AppTextStyle.dmSans(
+            size: 14, weight: FontWeight.w700, color: AppColors.gold,
+          )),
+        ),
+      ),
+    );
   }
 
   Widget _buildExpensesButton(CashController cash) {

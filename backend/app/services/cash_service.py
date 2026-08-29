@@ -1,6 +1,6 @@
 """Module Caisse (§3.4) — agrégations, tséb9a, clôture de journée, P&L mensuel."""
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 from beanie import PydanticObjectId
 from fastapi import HTTPException, status
@@ -237,6 +237,83 @@ async def monthly_report(salon_id: PydanticObjectId, year: int, month: int) -> d
             CashClosure.day < end.date(),
         ).count(),
     }
+
+
+async def payroll(
+    *,
+    staff_ids: list[PydanticObjectId],
+    start: datetime,
+    end: datetime,
+    names: dict[PydanticObjectId, str] | None = None,
+) -> list[dict]:
+    """Ce que chaque coiffeur a gagné sur la période, tséb9as déduites (§3.4).
+
+    C'est le document que le gérant a réellement en main le jour de la paie :
+    ce qui a été encaissé, la part de l'employé, ses pourboires, ce qu'il a
+    déjà touché en avance, et le reste à lui donner.
+
+    Les tséb9as comptées sont les approuvées **et** les soldées : une avance
+    déjà déduite lors d'une clôture doit rester visible dans le décompte de la
+    semaine, sinon le total ne correspond plus à ce qui est sorti de la caisse.
+    """
+    if not staff_ids:
+        return []
+
+    # Requêtes en dictionnaire plutôt qu'en expressions Beanie : ces dernières
+    # exigent un modèle initialisé, ce qui rendrait l'agrégation — du calcul
+    # d'argent — impossible à tester sans base.
+    txs = await Transaction.find(
+        {
+            "staff_id": {"$in": staff_ids},
+            "paid_at": {"$gte": start, "$lt": end},
+        }
+    ).to_list()
+    advances = await Advance.find(
+        {
+            "staff_id": {"$in": staff_ids},
+            "status": {"$in": [AdvanceStatus.APPROVED, AdvanceStatus.SETTLED]},
+            "requested_at": {"$gte": start, "$lt": end},
+        }
+    ).to_list()
+
+    lignes: dict[PydanticObjectId, dict] = {
+        sid: {
+            "staff_id": str(sid),
+            "name": (names or {}).get(sid, ""),
+            "services": 0,
+            "gross": 0.0,
+            "earned": 0.0,
+            "tips": 0.0,
+            "advances": 0.0,
+        }
+        for sid in staff_ids
+    }
+
+    for t in txs:
+        ligne = lignes.get(t.staff_id)
+        if ligne is None:
+            continue
+        ligne["services"] += 1
+        ligne["gross"] += t.amount
+        ligne["earned"] += t.staff_share
+        ligne["tips"] += t.tip
+
+    for a in advances:
+        ligne = lignes.get(a.staff_id)
+        if ligne is not None:
+            ligne["advances"] += a.amount
+
+    resultat = []
+    for ligne in lignes.values():
+        for cle in ("gross", "earned", "tips", "advances"):
+            ligne[cle] = round(ligne[cle], 2)
+        # Peut être négatif : un employé qui a pris plus d'avance qu'il n'a
+        # gagné doit le voir, c'est précisément ce que la tséb9a rend possible.
+        ligne["balance"] = round(ligne["earned"] + ligne["tips"] - ligne["advances"], 2)
+        resultat.append(ligne)
+
+    resultat.sort(key=lambda l: l["earned"], reverse=True)
+    return resultat
 
 
 async def staff_month_balance(staff: StaffMember, year: int, month: int) -> dict:

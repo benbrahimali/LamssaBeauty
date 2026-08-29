@@ -207,3 +207,41 @@ def test_le_patron_qui_coupe_ne_recoit_pas_deux_fois():
 
     # La déduplication passe par un `set` sur les identifiants.
     assert "{u for u in user_ids" in inspect.getsource(notify_many)
+
+
+# ── Semaine de paie (§3.4) ───────────────────────────────────────────────────
+def test_la_semaine_commence_le_lundi():
+    """Les salons paient en fin de semaine.
+
+    Une semaine démarrant le dimanche couperait le samedi — leur plus grosse
+    journée — entre deux paies.
+    """
+    from app.core.timeutils import local_week_bounds, to_local
+
+    # 2026-08-27 est un jeudi.
+    start, end = local_week_bounds(date(2026, 8, 27))
+    assert to_local(start).date() == date(2026, 8, 24), "lundi"
+    assert to_local(end).date() == date(2026, 8, 31), "lundi suivant"
+
+
+def test_un_lundi_est_le_premier_jour_de_sa_propre_semaine():
+    from app.core.timeutils import local_week_bounds, to_local
+
+    start, _ = local_week_bounds(date(2026, 8, 24))
+    assert to_local(start).date() == date(2026, 8, 24)
+
+
+def test_un_dimanche_appartient_a_la_semaine_qui_s_acheve():
+    from app.core.timeutils import local_week_bounds, to_local
+
+    start, _ = local_week_bounds(date(2026, 8, 30))
+    assert to_local(start).date() == date(2026, 8, 24)
+
+
+def test_la_semaine_dure_sept_jours_locaux():
+    """Le passage à l'heure d'été ne doit pas produire une semaine de 6 j 23 h."""
+    from app.core.timeutils import local_week_bounds, to_local
+
+    for jour in [date(2026, 3, 29), date(2026, 10, 25), date(2026, 8, 27)]:
+        start, end = local_week_bounds(jour)
+        assert (to_local(end).date() - to_local(start).date()).days == 7, jour

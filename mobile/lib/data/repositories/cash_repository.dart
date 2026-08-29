@@ -46,6 +46,30 @@ class CashRepository {
           query: {'salon_id': salonId},
           body: {'label': label, 'amount': amount, 'category': category});
 
+  /// Paie de la semaine, par coiffeur (§3.4).
+  ///
+  /// Le montant qui compte est `balance` : ce qui reste à remettre en main
+  /// propre une fois les tséb9as déduites, pas le brut gagné.
+  Future<Payroll> payroll(String salonId, {DateTime? weekOf}) async {
+    final data = await _api.get('/cash/payroll', query: {
+      'salon_id': salonId,
+      if (weekOf != null) 'week_of': _isoDay(weekOf),
+    }) as Map<String, dynamic>;
+    return Payroll.fromJson(data);
+  }
+
+  /// La même semaine, vue par le coiffeur : ce qu'il touchera.
+  Future<PayrollLine> myPayroll({DateTime? weekOf}) async {
+    final data = await _api.get('/cash/me/payroll', query: {
+      if (weekOf != null) 'week_of': _isoDay(weekOf),
+    }) as Map<String, dynamic>;
+    return PayrollLine.fromJson(data);
+  }
+
+  static String _isoDay(DateTime d) => '${d.year}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
   /// Dépenses du salon, les plus récentes d'abord (§3.4).
   ///
   /// Sans cette liste, une dépense saisie de travers restait invisible : le
@@ -203,5 +227,87 @@ class Expense {
         amount: (json['amount'] as num?)?.toDouble() ?? 0,
         category: json['category']?.toString() ?? 'autre',
         spentAt: DateTime.tryParse(json['spent_at']?.toString() ?? '')?.toLocal(),
+      );
+}
+
+
+/// Ce que le gérant doit à son équipe pour la semaine.
+class Payroll {
+  const Payroll({
+    required this.weekStart,
+    required this.weekEnd,
+    this.staff = const [],
+    this.totalEarned = 0,
+    this.totalAdvances = 0,
+    this.totalToPay = 0,
+  });
+
+  final String weekStart;
+  final String weekEnd;
+  final List<PayrollLine> staff;
+  final double totalEarned;
+  final double totalAdvances;
+  final double totalToPay;
+
+  /// Les lignes sans activité ni avance encombrent la fiche d'un salon qui a
+  /// beaucoup de chaises : on ne montre que ceux qui ont quelque chose.
+  List<PayrollLine> get active =>
+      staff.where((l) => l.services > 0 || l.advances > 0).toList();
+
+  factory Payroll.fromJson(Map<String, dynamic> json) => Payroll(
+        weekStart: json['week_start']?.toString() ?? '',
+        weekEnd: json['week_end']?.toString() ?? '',
+        staff: ((json['staff'] as List?) ?? const [])
+            .map((e) => PayrollLine.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        totalEarned: (json['total_earned'] as num?)?.toDouble() ?? 0,
+        totalAdvances: (json['total_advances'] as num?)?.toDouble() ?? 0,
+        totalToPay: (json['total_to_pay'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+/// La ligne de paie d'un coiffeur.
+class PayrollLine {
+  const PayrollLine({
+    required this.staffId,
+    this.name = '',
+    this.services = 0,
+    this.gross = 0,
+    this.earned = 0,
+    this.tips = 0,
+    this.advances = 0,
+    this.balance = 0,
+    this.weekStart = '',
+    this.weekEnd = '',
+  });
+
+  final String staffId;
+  final String name;
+  final int services;
+  final double gross;
+  final double earned;
+  final double tips;
+  final double advances;
+
+  /// Peut être négatif : l'employé a pris plus d'avance qu'il n'a gagné.
+  /// Le masquer laisserait croire que le compte est soldé.
+  final double balance;
+
+  final String weekStart;
+  final String weekEnd;
+
+  bool get owesSalon => balance < 0;
+
+  factory PayrollLine.fromJson(Map<String, dynamic> json) => PayrollLine(
+        staffId: json['staff_id']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        services: (json['services'] as num?)?.toInt() ?? 0,
+        gross: (json['gross'] as num?)?.toDouble() ?? 0,
+        earned: (json['earned'] as num?)?.toDouble() ?? 0,
+        tips: (json['tips'] as num?)?.toDouble() ?? 0,
+        advances: (json['advances'] as num?)?.toDouble() ?? 0,
+        balance: (json['balance'] as num?)?.toDouble() ?? 0,
+        weekStart: json['week_start']?.toString() ?? '',
+        weekEnd: json['week_end']?.toString() ?? '',
       );
 }

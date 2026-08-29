@@ -42,6 +42,19 @@ def local_month_bounds(year: int, month: int, tz: ZoneInfo = TZ) -> tuple[dateti
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 
+def local_week_bounds(d: date, tz: ZoneInfo = TZ) -> tuple[datetime, datetime]:
+    """Bornes UTC de la semaine locale contenant `d`, du lundi au dimanche.
+
+    Le lundi comme premier jour n'est pas un détail : les salons tunisiens
+    paient leurs employés en fin de semaine, et une semaine qui commencerait le
+    dimanche couperait le samedi — leur plus grosse journée — en deux paies.
+    """
+    monday = d - timedelta(days=d.weekday())
+    start = datetime.combine(monday, time.min, tzinfo=tz)
+    end = start + timedelta(days=7)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+
+
 def parse_hhmm(value: str) -> time:
     hour, minute = value.split(":")
     return time(int(hour), int(minute))

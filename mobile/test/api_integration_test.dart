@@ -623,6 +623,50 @@ void main() {
       expect(advances.first.isPending, isTrue);
     });
 
+    test('la paie de la semaine déduit les tséb9as accordées', () async {
+      // Circuit complet : le coiffeur demande, le gérant accorde, la paie
+      // baisse d'autant. C'est la seule vérification qui prouve que la tséb9a
+      // sort réellement de ce que le salon doit.
+      //
+      // On tranche d'abord ce qui traîne : une demande en attente empêcherait
+      // d'en créer une nouvelle, de montant connu.
+      for (final enAttente
+          in await cash.salonAdvances(salonId, status: 'pending')) {
+        await cash.decideAdvance(enAttente.id, true);
+      }
+
+      final avant = await cash.payroll(salonId);
+
+      final staffApi = ApiClient(TokenStore());
+      addTearDown(staffApi.dispose);
+      await AuthRepository(staffApi).verifyOtp(phone: staffPhone, code: devCode);
+      final demande = await CashRepository(staffApi).requestAdvance(
+        salonId: salonId,
+        amount: 25,
+        reason: 'test paie',
+      );
+      await cash.decideAdvance(demande.id, true);
+
+      final apres = await cash.payroll(salonId);
+      expect(apres.totalAdvances, closeTo(avant.totalAdvances + 25, 0.01));
+      expect(apres.totalToPay, closeTo(avant.totalToPay - 25, 0.01),
+          reason: 'la tséb9a réduit exactement ce qui reste à payer');
+    });
+
+    test('chaque coiffeur voit sa propre paie', () async {
+      final staffApi = ApiClient(TokenStore());
+      addTearDown(staffApi.dispose);
+      await AuthRepository(staffApi).verifyOtp(phone: staffPhone, code: devCode);
+
+      final ligne = await CashRepository(staffApi).myPayroll();
+
+      expect(ligne.weekStart, isNotEmpty);
+      // Le solde est la part gagnée plus les pourboires, avances déduites :
+      // les lignes affichées doivent s'additionner au total montré.
+      expect(ligne.balance,
+          closeTo(ligne.earned + ligne.tips - ligne.advances, 0.01));
+    });
+
     test("l'agenda du jour est lisible par le gérant", () async {
       final agenda = await bookings.agenda(salonId: salonId);
       expect(agenda.date, isNotEmpty);

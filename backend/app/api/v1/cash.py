@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 from app.core.deps import my_staff_profile
 from app.core.security import require_role
-from app.core.timeutils import to_local, utcnow
+from app.core.timeutils import local_week_bounds, to_local, utcnow
 from app.models.documents import CashClosure, Expense, Salon, StaffMember, User
 from app.models.enums import NotificationType, Role
 from app.schemas.cash import ClosureCreate, ExpenseCreate
@@ -16,6 +16,7 @@ from app.services.cash_service import (
     close_day,
     day_summary,
     monthly_report,
+    payroll,
     staff_day_summary,
     staff_month_balance,
 )
@@ -86,6 +87,57 @@ async def my_balance(
 ):
     now = to_local(utcnow())
     return await staff_month_balance(staff, year or now.year, month or now.month)
+
+
+@router.get("/payroll", summary="Paie de la semaine, par coiffeur")
+async def team_payroll(
+    salon_id: PydanticObjectId,
+    week_of: date | None = None,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    """Ce que le gérant doit à chaque membre de son équipe cette semaine.
+
+    Les tséb9as accordées sur la période sont déduites : c'est le montant réel
+    à remettre en main propre, pas le brut gagné.
+    """
+    salon = await _my_salon(salon_id, user)
+    start, end = local_week_bounds(week_of or to_local(utcnow()).date())
+    members = await StaffMember.find(StaffMember.salon_id == salon.id).to_list()
+
+    lignes = await payroll(
+        staff_ids=[m.id for m in members],
+        start=start,
+        end=end,
+        names={m.id: m.display_name for m in members},
+    )
+    return {
+        "week_start": str(to_local(start).date()),
+        "week_end": str(to_local(end).date()),
+        "staff": lignes,
+        "total_earned": round(sum(l["earned"] + l["tips"] for l in lignes), 2),
+        "total_advances": round(sum(l["advances"] for l in lignes), 2),
+        "total_to_pay": round(sum(l["balance"] for l in lignes), 2),
+    }
+
+
+@router.get("/me/payroll", summary="Ma paie de la semaine")
+async def my_payroll(
+    week_of: date | None = None,
+    staff: StaffMember = Depends(my_staff_profile),
+):
+    """La même chose vue de l'employé : ce qu'il touchera en fin de semaine."""
+    start, end = local_week_bounds(week_of or to_local(utcnow()).date())
+    lignes = await payroll(
+        staff_ids=[staff.id],
+        start=start,
+        end=end,
+        names={staff.id: staff.display_name},
+    )
+    return {
+        "week_start": str(to_local(start).date()),
+        "week_end": str(to_local(end).date()),
+        **lignes[0],
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
