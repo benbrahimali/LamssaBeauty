@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../widgets/breathing.dart';
 import '../widgets/common_widgets.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -11,7 +12,8 @@ class OnboardingScreen extends StatefulWidget {
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen> {
+class _OnboardingScreenState extends State<OnboardingScreen>
+    with SingleTickerProviderStateMixin {
   final _ctrl = PageController();
   int _page = 0;
 
@@ -33,9 +35,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ),
   ];
 
+  /// Même respiration que le splash : l'onboarding le suit immédiatement,
+  /// deux traitements différents se verraient comme une rupture.
+  late final AnimationController _pulseCtrl =
+      AnimationController(vsync: this, duration: breathingCycle);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    syncBreathing(context, _pulseCtrl);
+  }
+
   @override
   void dispose() {
     _ctrl.dispose();
+    _pulseCtrl.dispose();
     super.dispose();
   }
 
@@ -95,18 +109,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(
-            width: 140, height: 140,
-            decoration: BoxDecoration(
-              gradient: RadialGradient(colors: [
-                AppColors.gold.withValues(alpha: 0.15),
-                AppColors.bg,
-              ]),
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.gold.withValues(alpha: 0.2)),
-            ),
-            alignment: Alignment.center,
-            child: Text(slide.emoji, style: const TextStyle(fontSize: 60)),
+          // Isolé du reste : seul ce sous-arbre se repeint à chaque image.
+          RepaintBoundary(
+            child: Stack(alignment: Alignment.center, children: [
+              BreathingHalo(controller: _pulseCtrl, size: 210),
+              // L'anneau extérieur culmine après l'intérieur : ce retard fait
+              // lire une onde partant de l'icône, pas un simple zoom.
+              BreathingRing(
+                controller: _pulseCtrl,
+                phase: -0.09,
+                size: 196,
+                restOpacity: 0.07,
+              ),
+              BreathingRing(
+                controller: _pulseCtrl,
+                size: 140,
+                restOpacity: 0.2,
+                // L'icône ne change pas de taille avec l'anneau : un emoji mis
+                // à l'échelle devient flou.
+                child: Text(slide.emoji, style: const TextStyle(fontSize: 60)),
+              ),
+            ]),
           ),
           const SizedBox(height: 40),
           Text(slide.title, style: GoogleFonts.playfairDisplay(

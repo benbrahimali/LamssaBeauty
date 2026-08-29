@@ -15,7 +15,7 @@ void main() {
   /// dans l'arbre, et `find.byType` en ramenait quatre au lieu de deux.
   List<double> ringScales(WidgetTester tester) => const [280, 200]
       .map((size) => tester
-          .widget<Transform>(find.byKey(ValueKey('splash-ring-$size')))
+          .widget<Transform>(find.byKey(ValueKey('breathing-ring-$size')))
           .transform
           .getMaxScaleOnAxis())
       .toList();
