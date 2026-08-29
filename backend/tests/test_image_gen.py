@@ -188,3 +188,45 @@ async def test_l_erreur_rendue_correspond_a_ce_que_l_utilisateur_peut_faire(
 
 def _configure_gemini():
     settings.GEMINI_API_KEY = "test-key"
+
+
+def test_un_quota_gratuit_a_zero_n_est_pas_un_quota_epuise():
+    """« limit: 0 » veut dire « pas offert », pas « reviens demain »."""
+    permanent = (
+        "Quota exceeded for metric: "
+        "generativelanguage.googleapis.com/generate_content_free_tier_requests, "
+        "limit: 0, model: gemini-3.1-flash-image"
+    )
+    temporaire = (
+        "Quota exceeded for metric: generate_requests_per_model_per_day, "
+        "limit: 100, model: gemini-3.1-flash-image"
+    )
+    assert gen._is_permanent_quota(permanent) is True
+    assert gen._is_permanent_quota(temporaire) is False
+
+
+@pytest.mark.asyncio
+async def test_un_modele_non_offert_est_annonce_comme_indisponible(monkeypatch):
+    """L'app doit masquer la fonction, pas inviter à réessayer sans fin."""
+    import httpx
+
+    settings.GEMINI_API_KEY = "test-key"
+
+    class FauxClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post(self, *a, **k):
+            return httpx.Response(
+                429,
+                json={"error": {"message": "free_tier_requests, limit: 0, model: x"}},
+            )
+
+    monkeypatch.setattr(gen.httpx, "AsyncClient", lambda *a, **k: FauxClient())
+
+    with pytest.raises(HTTPException) as exc:
+        await gen.preview("Fade")
+    assert exc.value.status_code == 503

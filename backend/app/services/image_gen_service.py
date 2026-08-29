@@ -98,6 +98,16 @@ def extract_image(payload: dict) -> bytes | None:
     return walk(payload)
 
 
+def _is_permanent_quota(body: str) -> bool:
+    """Distingue « quota épuisé » de « quota inexistant ».
+
+    Les deux arrivent en 429. Seul le corps les sépare : une limite gratuite à
+    zéro veut dire que le modèle demande un compte facturé, et aucune attente
+    n'y changera rien.
+    """
+    return "free_tier" in body and "limit: 0" in body
+
+
 async def _call(parts: list[dict]) -> bytes:
     key = _require_key()
     body = {"model": settings.GEMINI_IMAGE_MODEL, "input": parts}
@@ -122,6 +132,19 @@ async def _call(parts: list[dict]) -> bytes:
         # conseil : changer de coupe ne débloque rien, seule l'attente ou un
         # paiement le fera.
         if resp.status_code == 429:
+            # « limit: 0 » sur le palier gratuit n'est pas un quota consommé :
+            # le modèle n'y est tout simplement pas offert. Dire « réessaie plus
+            # tard » ferait attendre indéfiniment — c'est une facturation à
+            # activer, donc un problème de serveur, pas d'utilisateur.
+            if _is_permanent_quota(resp.text):
+                log.error(
+                    "Gemini : %s indisponible sans facturation (quota gratuit à 0)",
+                    settings.GEMINI_IMAGE_MODEL,
+                )
+                raise HTTPException(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    "La génération d'images n'est pas disponible sur ce serveur.",
+                )
             raise HTTPException(
                 status.HTTP_429_TOO_MANY_REQUESTS,
                 "Le générateur d'images a atteint sa limite. Réessaie plus tard.",
