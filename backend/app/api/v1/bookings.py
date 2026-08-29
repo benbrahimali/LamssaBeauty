@@ -24,7 +24,7 @@ from app.services.booking_service import (
     available_slots,
     create_booking,
 )
-from app.services.notification_service import notify
+from app.services.notification_service import notify, notify_many
 from app.services.split_engine import SplitEngine
 
 router = APIRouter()
@@ -94,14 +94,17 @@ async def book(body: BookingCreate, user: User = Depends(current_user)):
         note=body.note,
     )
 
-    staff_user_id = staff.user_id
     when = to_local(booking.start).strftime("%d/%m à %H:%M")
-    await notify(
-        staff_user_id,
+    qui = booking.client_name or user.name or "Un client"
+
+    # Le coiffeur concerné et le gérant du salon. `notify_many` déduplique :
+    # quand le patron coupe lui-même, il ne reçoit pas deux fois la même chose.
+    await notify_many(
+        [staff.user_id, salon.owner_id],
         NotificationType.BOOKING_CONFIRMED,
         "Nouveau rendez-vous",
-        f"{booking.client_name or user.name or 'Un client'} — {when} chez {salon.name}",
-        {"booking_id": str(booking.id)},
+        f"{qui} — {when} avec {staff.display_name or 'votre équipe'}",
+        {"booking_id": str(booking.id), "salon_id": str(salon.id)},
     )
     return booking
 

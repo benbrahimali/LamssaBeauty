@@ -14,6 +14,7 @@ import 'manage_salon_screen.dart';
 import 'my_bookings_screen.dart';
 import 'my_portfolio_screen.dart';
 import 'privacy_screen.dart';
+import 'reels_screen.dart';
 import 'salon_qr_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -358,6 +359,15 @@ class ProfileScreen extends StatelessWidget {
           'label': 'خدمتي',
           'action': 'my_portfolio',
         },
+      // Les reels n'étaient atteignables que depuis l'onglet « موضة », réservé
+      // au client : les seuls autorisés à publier ne pouvaient pas y accéder.
+      if (loggedIn &&
+          (auth.context?.staffId != null || auth.context?.ownedSalonId != null))
+        {
+          'icon': Icons.videocam_rounded,
+          'label': 'ريلز — انشر فيديو',
+          'action': 'reels',
+        },
       // Modifier un compte ou régler sa confidentialité n'a aucun sens tant
       // qu'il n'y en a pas : ces entrées ne mèneraient nulle part.
       if (loggedIn) ...[
@@ -430,6 +440,10 @@ class ProfileScreen extends StatelessWidget {
                   case 'help':
                     await Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => const HelpScreen(),
+                    ));
+                  case 'reels':
+                    await Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const ReelsScreen(),
                     ));
                   case 'salon_qr':
                     await Navigator.of(context).push(MaterialPageRoute(

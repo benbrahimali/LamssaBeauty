@@ -604,9 +604,22 @@ void main() {
     });
 
     test('les tséb9as en attente remontent avec le nom du demandeur', () async {
+      // Le test crée sa propre demande : celle du seed peut avoir été soldée
+      // par une clôture de journée, et il redeviendrait alors vert ou rouge
+      // selon l'ordre des exécutions précédentes.
+      final staffApi = ApiClient(TokenStore());
+      addTearDown(staffApi.dispose);
+      await AuthRepository(staffApi)
+          .verifyOtp(phone: staffPhone, code: devCode);
+      await CashRepository(staffApi).requestAdvance(
+        salonId: salonId,
+        amount: 30,
+        reason: 'test intégration',
+      );
       final advances = await cash.salonAdvances(salonId, status: 'pending');
-      expect(advances, isNotEmpty, reason: 'le seed crée une demande par salon');
-      expect(advances.first.staffName, isNotEmpty);
+      expect(advances, isNotEmpty);
+      expect(advances.first.staffName, isNotEmpty,
+          reason: 'le nom du demandeur doit être résolu côté serveur');
       expect(advances.first.isPending, isTrue);
     });
 

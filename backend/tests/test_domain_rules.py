@@ -179,3 +179,31 @@ def test_aucune_route_ne_s_appuie_sur_le_role_staff():
     for fichier in api.rglob("*.py"):
         source = fichier.read_text(encoding="utf-8")
         assert "Depends(require_role(Role.STAFF" not in source, fichier.name
+
+
+def test_une_reservation_previent_le_coiffeur_et_le_gerant():
+    """Le salon doit savoir, pas seulement la personne qui coupera.
+
+    Le gérant tient l'agenda et la caisse : ne prévenir que le coiffeur le
+    laissait découvrir ses journées après coup.
+    """
+    import inspect
+
+    from app.api.v1 import bookings
+
+    source = inspect.getsource(bookings.create_booking_route) \
+        if hasattr(bookings, "create_booking_route") else inspect.getsource(bookings)
+    debut = source.index("Nouveau rendez-vous")
+    extrait = source[max(0, debut - 400):debut]
+    assert "staff.user_id" in extrait
+    assert "salon.owner_id" in extrait
+
+
+def test_le_patron_qui_coupe_ne_recoit_pas_deux_fois():
+    """`notify_many` déduplique : sinon un patron-coiffeur aurait deux alertes."""
+    import inspect
+
+    from app.services.notification_service import notify_many
+
+    # La déduplication passe par un `set` sur les identifiants.
+    assert "{u for u in user_ids" in inspect.getsource(notify_many)
