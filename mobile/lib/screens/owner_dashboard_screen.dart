@@ -6,6 +6,7 @@ import '../data/models.dart';
 import '../state/auth_controller.dart';
 import '../state/cash_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/revenue_bar.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 import 'create_salon_screen.dart';
@@ -381,24 +382,11 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
                 final label = closure.day.length >= 10
                     ? closure.day.substring(8, 10)
                     : closure.day;
-                return Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                  Text(closure.total.toStringAsFixed(0), style: GoogleFonts.dmSans(
-                    fontSize: 9, color: AppColors.gold, fontWeight: FontWeight.w700,
-                  )),
-                  const SizedBox(height: 4),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 600),
-                    width: 24,
-                    height: (ratio * 90).clamp(4, 90),
-                    decoration: BoxDecoration(
-                      color: AppColors.gold.withValues(alpha: 0.6),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(label,
-                      style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.sub)),
-                ]);
+                return RevenueBar(
+                  value: closure.total,
+                  ratio: ratio,
+                  label: label,
+                );
               }).toList(),
             ),
           ),
