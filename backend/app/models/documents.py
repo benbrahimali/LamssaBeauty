@@ -390,6 +390,42 @@ class PortfolioItem(Document):
         ]
 
 
+class Reel(Document):
+    """Vidéo courte publiée par un coiffeur ou un salon (§3.8).
+
+    Publique par construction : c'est ce qui la rend utile — un visiteur sans
+    compte doit pouvoir la regarder, sinon elle n'attire personne.
+
+    Un reel appartient soit à un coiffeur, soit au salon lui-même (compte du
+    gérant) : `staff_id` est donc facultatif, `salon_id` ne l'est jamais.
+    """
+    salon_id: PydanticObjectId
+    staff_id: PydanticObjectId | None = None
+    author_id: PydanticObjectId                # utilisateur qui a publié
+
+    video_url: str
+    thumbnail_url: str = ""
+    public_id: str = ""                        # référence Cloudinary, pour la suppression
+    duration_sec: float = 0.0                  # mesurée par le fournisseur, pas déclarée
+
+    caption: str = ""
+    tags: list[str] = []
+    views: int = 0
+    likes: int = 0
+    liked_by: list[PydanticObjectId] = []
+    created_at: datetime = Field(default_factory=utcnow)
+
+    class Settings:
+        name = "reels"
+        indexes = [
+            # Fil « En vogue » : récents d'abord, puis les plus aimés.
+            IndexModel([("created_at", pymongo.DESCENDING), ("likes", pymongo.DESCENDING)]),
+            IndexModel([("salon_id", pymongo.ASCENDING), ("created_at", pymongo.DESCENDING)]),
+            IndexModel([("staff_id", pymongo.ASCENDING), ("created_at", pymongo.DESCENDING)]),
+            IndexModel([("tags", pymongo.ASCENDING)]),
+        ]
+
+
 class Notification(Document):
     user_id: PydanticObjectId
     type: NotificationType
@@ -420,5 +456,6 @@ ALL_DOCUMENTS = [
     Payment,
     Review,
     PortfolioItem,
+    Reel,
     Notification,
 ]

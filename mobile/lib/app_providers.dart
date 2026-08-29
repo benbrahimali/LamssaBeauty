@@ -9,6 +9,7 @@ import 'data/repositories/booking_repository.dart';
 import 'data/repositories/cash_repository.dart';
 import 'data/repositories/notification_repository.dart';
 import 'data/repositories/portfolio_repository.dart';
+import 'data/repositories/reel_repository.dart';
 import 'data/repositories/salon_admin_repository.dart';
 import 'data/repositories/salon_repository.dart';
 import 'data/repositories/style_dna_repository.dart';
@@ -17,6 +18,7 @@ import 'state/booking_controller.dart';
 import 'state/cash_controller.dart';
 import 'state/notifications_controller.dart';
 import 'state/portfolio_controller.dart';
+import 'state/reels_controller.dart';
 import 'state/salons_controller.dart';
 
 /// Assemble le graphe de dépendances : un seul [ApiClient] partagé par tous les
@@ -37,6 +39,7 @@ class AppProviders extends StatelessWidget {
     final cashRepo = CashRepository(api);
     final notificationRepo = NotificationRepository(api);
     final portfolioRepo = PortfolioRepository(api);
+    final reelRepo = ReelRepository(api);
     final push = PushService(authRepo);
 
     return MultiProvider(
@@ -48,6 +51,7 @@ class AppProviders extends StatelessWidget {
         Provider<CashRepository>.value(value: cashRepo),
         Provider<StyleDnaRepository>(create: (_) => StyleDnaRepository(api)),
         Provider<PortfolioRepository>.value(value: portfolioRepo),
+        Provider<ReelRepository>.value(value: reelRepo),
         Provider<SalonAdminRepository>(
           create: (_) => SalonAdminRepository(api),
         ),
@@ -73,6 +77,7 @@ class AppProviders extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => MyPortfolioController(portfolioRepo),
         ),
+        ChangeNotifierProvider(create: (_) => ReelsController(reelRepo)),
       ],
       child: child,
     );

@@ -79,6 +79,19 @@ class Settings(BaseSettings):
     S3_PUBLIC_BASE: str = ""
     MAX_UPLOAD_MB: int = 8
 
+    # ── Cloudinary (§3.2, §3.8) ──────────────────────────────────────────
+    # Fournisseur retenu pour les photos de salon et les reels. Sans clé, on
+    # retombe sur le disque local : l'app reste utilisable en développement.
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
+    # ── Reels vidéo (§3.8) ───────────────────────────────────────────────
+    # 90 s : au-delà, ce n'est plus une story mais une vidéo qu'on ne regarde
+    # pas jusqu'au bout dans un fil.
+    REEL_MAX_SECONDS: int = 90
+    REEL_MAX_MB: int = 60
+
     # ── Style DNA — analyse de selfie par modèle vision (§2.4, §8.5) ─────
     # La clé reste côté serveur : une clé embarquée dans l'APK serait extractible.
     ANTHROPIC_API_KEY: str = ""

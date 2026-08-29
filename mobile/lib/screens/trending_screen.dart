@@ -8,6 +8,7 @@ import '../state/auth_controller.dart';
 import '../state/portfolio_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
+import 'reels_screen.dart';
 
 /// Fil « En vogue » (§3.8, §8.3).
 ///
@@ -54,6 +55,30 @@ class _TrendingScreenState extends State<TrendingScreen> {
           Text('في الموضة', style: AppTextStyle.playfair(size: 28)),
           const SizedBox(width: 8),
           const Text('🔥', style: TextStyle(fontSize: 22)),
+          const Spacer(),
+          // Les reels partagent le même public que le fil photo : on y accède
+          // d'ici plutôt que d'ajouter un sixième onglet à la barre.
+          GestureDetector(
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => ReelsScreen(onGoStaff: widget.onGoStaff),
+            )),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.gold.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(50),
+                border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
+              ),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.play_circle_fill_rounded,
+                    size: 16, color: AppColors.gold),
+                const SizedBox(width: 6),
+                Text('ريلز',
+                    style: AppTextStyle.dmSans(
+                        size: 13, color: AppColors.gold, weight: FontWeight.w700)),
+              ]),
+            ),
+          ),
         ]),
       );
 

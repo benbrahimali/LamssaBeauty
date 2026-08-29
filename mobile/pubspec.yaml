@@ -32,6 +32,10 @@ dependencies:
   http_parser: ^4.0.2   # MediaType pour l'upload multipart (Style DNA)
   shared_preferences: ^2.2.3
 
+  # Reels (§3.8) — lecture vidéo et sélection depuis la galerie
+  video_player: ^2.9.2
+  chewie: ^1.8.5
+
   # UI Components
   qr_flutter: ^4.1.0        # QR du salon — pur Dart, aucune dépendance native
   smooth_page_indicator: ^1.1.0

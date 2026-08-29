@@ -17,6 +17,7 @@ from app.api.v1 import (
     notifications,
     payments,
     portfolio,
+    reels,
     reviews,
     salons,
     staff,
@@ -89,6 +90,7 @@ app.include_router(advances.router, prefix=f"{V1}/advances", tags=["tséb9a"])
 app.include_router(payments.router, prefix=f"{V1}/payments", tags=["paiements"])
 app.include_router(reviews.router, prefix=f"{V1}/reviews", tags=["avis"])
 app.include_router(portfolio.router, prefix=f"{V1}/portfolio", tags=["portfolio"])
+app.include_router(reels.router, prefix=f"{V1}/reels", tags=["reels"])
 app.include_router(notifications.router, prefix=f"{V1}/notifications", tags=["notifications"])
 app.include_router(style_dna.router, prefix=f"{V1}/style-dna", tags=["style dna"])
 

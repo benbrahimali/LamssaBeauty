@@ -1,4 +1,10 @@
-"""Stockage des médias (§4.1) — S3/R2 en prod, disque local en dev."""
+"""Stockage des médias (§4.1).
+
+Trois destinations, choisies par la configuration : Cloudinary (photos de salon
+et reels), S3/R2, ou le disque local. L'ordre n'est pas arbitraire — Cloudinary
+sait redimensionner et générer les vignettes des vidéos, ce que ni S3 ni le
+disque ne font.
+"""
 import logging
 import os
 import uuid
@@ -6,6 +12,7 @@ import uuid
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.config import settings
+from app.services import cloudinary_service
 
 log = logging.getLogger("lamssa.storage")
 
@@ -26,6 +33,12 @@ async def save_image(file: UploadFile, folder: str) -> str:
             status.HTTP_413_CONTENT_TOO_LARGE,
             f"Image trop lourde (max {settings.MAX_UPLOAD_MB} Mo)",
         )
+
+    if cloudinary_service.is_configured():
+        result = await cloudinary_service.upload(
+            payload, f"{uuid.uuid4().hex}{ext}", f"lamssa/{folder}"
+        )
+        return result["url"]
 
     key = f"{folder}/{uuid.uuid4().hex}{ext}"
     if settings.S3_KEY and settings.S3_ENDPOINT:
