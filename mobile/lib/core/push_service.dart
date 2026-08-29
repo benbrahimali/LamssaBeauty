@@ -11,6 +11,21 @@ import '../data/repositories/auth_repository.dart';
 /// Ce que l'utilisateur a touché : sert à ouvrir le bon écran.
 typedef PushTapHandler = void Function(Map<String, dynamic> data);
 
+/// Reçoit les messages quand l'app est en arrière-plan ou fermée.
+///
+/// Doit être une fonction de premier niveau : Android la rappelle dans un
+/// isolate séparé, où rien de l'état de l'app n'existe. C'est aussi pourquoi
+/// on se contente d'y journaliser — toucher aux contrôleurs depuis cet isolate
+/// n'aurait aucun effet sur l'interface.
+///
+/// Sans elle, un message **de données seules** serait perdu en silence ; les
+/// notifications avec titre et corps, elles, restent affichées par Android.
+@pragma('vm:entry-point')
+Future<void> lamssaBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+  debugPrint('Push reçu en arrière-plan: ${message.messageId}');
+}
+
 /// Notifications push (§3.7).
 ///
 /// Firebase n'est configuré que pour Android et iOS ; sur le web et le desktop
@@ -74,6 +89,10 @@ class PushService {
     await FirebaseMessaging.instance
         .setForegroundNotificationPresentationOptions(
             alert: true, badge: true, sound: true);
+
+    // À enregistrer avant tout autre abonnement : Android peut réveiller
+    // l'app par un message alors qu'elle n'est pas lancée.
+    FirebaseMessaging.onBackgroundMessage(lamssaBackgroundHandler);
 
     _foregroundSub = FirebaseMessaging.onMessage.listen(_showLocal);
     _tapSub = FirebaseMessaging.onMessageOpenedApp.listen(_handleTap);

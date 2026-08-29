@@ -6,7 +6,15 @@ from celery.schedules import crontab
 
 from app.core.config import settings
 
-celery_app = Celery("lamssa", broker=settings.REDIS_URI, backend=settings.REDIS_URI)
+celery_app = Celery(
+    "lamssa",
+    broker=settings.REDIS_URI,
+    backend=settings.REDIS_URI,
+    # Sans cet import, le worker démarre avec une liste de tâches vide : beat
+    # publie « lamssa.send_reminders », le worker la rejette comme inconnue, et
+    # aucun rappel ne part — sans la moindre erreur visible.
+    include=["app.workers.tasks"],
+)
 celery_app.conf.update(
     task_serializer="json",
     result_serializer="json",
