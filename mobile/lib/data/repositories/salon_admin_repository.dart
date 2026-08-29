@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import '../../core/api_client.dart';
 import '../models.dart';
+import 'portfolio_repository.dart';
 
 /// Administration d'un salon par son gérant (§3.1 onboarding, §3.5 équipe).
 ///
@@ -176,6 +179,103 @@ class SalonAdminRepository {
   Future<void> removeStaff(String salonId, String staffId) =>
       _api.delete('/salons/$salonId/staff/$staffId');
 
+  /// Avis du salon, masqués compris — réservé au gérant.
+  Future<List<SalonReview>> reviews(String salonId) async {
+    final data = await _api.get('/reviews/salon/$salonId',
+        query: {'include_hidden': true, 'limit': 50}) as List;
+    return data
+        .map((e) => SalonReview.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  /// Masque ou republie un avis (§3.8).
+  ///
+  /// Masquer recalcule la note du salon côté serveur : un avis injurieux ne
+  /// doit pas continuer à peser sur la moyenne une fois retiré.
+  Future<void> moderateReview(String reviewId, {required bool hide}) =>
+      _api.patch('/reviews/$reviewId/moderate', query: {'hide': hide});
+
+  /// Rembourse un paiement encaissé (§3.6).
+  ///
+  /// Le mouvement d'argent réel se fait chez le PSP ; l'API trace l'état pour
+  /// que la caisse et le RDV restent cohérents.
+  Future<void> refund(String paymentId) =>
+      _api.post('/payments/$paymentId/refund');
+
+  /// Classement interne de l'équipe (§3.5) — coupes puis note.
+  ///
+  /// Réservé au gérant : un classement public exposerait les coiffeurs les
+  /// moins bien notés aux yeux des clients.
+  Future<List<RankedStaff>> ranking(String salonId) async {
+    final data = await _api.get('/salons/$salonId/ranking') as List;
+    return data
+        .map((e) => RankedStaff.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  /// Congés à venir de l'équipe (§3.5). Bloquent automatiquement les créneaux.
+  Future<List<TimeOff>> timeOff(String salonId) async {
+    final data = await _api.get('/salons/$salonId/timeoff') as List;
+    return data
+        .map((e) => TimeOff.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  /// Pose un congé et renvoie le nombre de RDV déjà pris sur la période.
+  ///
+  /// Ce compte n'est pas décoratif : sans lui, un gérant bloque une semaine
+  /// sans voir qu'il vient de poser des lapins à ses clients.
+  Future<({TimeOff timeOff, int toReschedule})> addTimeOff({
+    required String salonId,
+    required String staffId,
+    required DateTime start,
+    required DateTime end,
+    String reason = '',
+  }) async {
+    final data = await _api.post('/salons/$salonId/timeoff', body: {
+      'staff_id': staffId,
+      // Le serveur raisonne en UTC ; l'app saisit en heure locale.
+      'start': start.toUtc().toIso8601String(),
+      'end': end.toUtc().toIso8601String(),
+      'reason': reason,
+    }) as Map<String, dynamic>;
+    return (
+      timeOff: TimeOff.fromJson(Map<String, dynamic>.from(data['time_off'] as Map)),
+      toReschedule: (data['bookings_to_reschedule'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Future<void> removeTimeOff(String salonId, String offId) =>
+      _api.delete('/salons/$salonId/timeoff/$offId');
+
+  /// Ajoute une photo à la vitrine du salon. Renvoie la liste à jour.
+  ///
+  /// Le serveur refuse au-delà de 10 photos : une fiche plus longue ne se fait
+  /// plus défiler.
+  Future<List<String>> addPhoto(String salonId, File image) async {
+    final data = await _api.postMultipart(
+      '/salons/$salonId/photos',
+      field: 'file',
+      bytes: await image.readAsBytes(),
+      filename: image.path.split(RegExp(r'[/\\]')).last,
+      contentType: PortfolioRepository.contentTypeOf(image.path),
+      timeout: const Duration(seconds: 60),
+    ) as Map<String, dynamic>;
+    return ((data['photos'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList();
+  }
+
+  /// La photo est désignée par son URL, pas par sa position : deux
+  /// suppressions concurrentes effaceraient la mauvaise.
+  Future<List<String>> removePhoto(String salonId, String url) async {
+    final data = await _api.delete('/salons/$salonId/photos', query: {'url': url})
+        as Map<String, dynamic>;
+    return ((data['photos'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toList();
+  }
+
   /// Code public et liens de partage du salon (QR vitrine, WhatsApp).
   ///
   /// Le serveur attribue le code au passage si le salon n'en avait pas encore.
@@ -184,6 +284,111 @@ class SalonAdminRepository {
         await _api.get('/salons/$salonId/share') as Map<String, dynamic>;
     return SalonShare.fromJson(data);
   }
+}
+
+/// Un avis client, tel que le gérant le voit — y compris masqué.
+class SalonReview {
+  const SalonReview({
+    required this.id,
+    this.rating = 5,
+    this.comment = '',
+    this.hidden = false,
+    this.createdAt,
+  });
+
+  final String id;
+  final int rating;
+  final String comment;
+  final bool hidden;
+  final DateTime? createdAt;
+
+  SalonReview copyWith({bool? hidden}) => SalonReview(
+        id: id,
+        rating: rating,
+        comment: comment,
+        hidden: hidden ?? this.hidden,
+        createdAt: createdAt,
+      );
+
+  factory SalonReview.fromJson(Map<String, dynamic> json) => SalonReview(
+        id: (json['id'] ?? json['_id'])?.toString() ?? '',
+        rating: (json['rating'] as num?)?.toInt() ?? 5,
+        comment: json['comment']?.toString() ?? '',
+        hidden: json['status']?.toString() == 'hidden',
+        createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '')?.toLocal(),
+      );
+}
+
+/// Une ligne du classement interne de l'équipe.
+class RankedStaff {
+  const RankedStaff({
+    required this.rank,
+    required this.staffId,
+    required this.name,
+    this.chair = 1,
+    this.cuts = 0,
+    this.rating = 0,
+  });
+
+  final int rank;
+  final String staffId;
+  final String name;
+  final int chair;
+  final int cuts;
+  final double rating;
+
+  /// Podium : au-delà, un numéro suffit.
+  String get medal => switch (rank) {
+        1 => '🥇',
+        2 => '🥈',
+        3 => '🥉',
+        _ => '$rank',
+      };
+
+  factory RankedStaff.fromJson(Map<String, dynamic> json) => RankedStaff(
+        rank: (json['rank'] as num?)?.toInt() ?? 0,
+        staffId: json['staff_id']?.toString() ?? '',
+        name: json['name']?.toString() ?? '',
+        chair: (json['chair'] as num?)?.toInt() ?? 1,
+        cuts: (json['cuts'] as num?)?.toInt() ?? 0,
+        rating: (json['rating'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+/// Une absence de coiffeur : ses créneaux disparaissent automatiquement.
+class TimeOff {
+  const TimeOff({
+    required this.id,
+    required this.staffId,
+    required this.start,
+    required this.end,
+    this.reason = '',
+  });
+
+  final String id;
+  final String staffId;
+  final DateTime start;
+  final DateTime end;
+  final String reason;
+
+  /// Affiché en heure locale : le serveur stocke en UTC.
+  String get range {
+    String day(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
+    final from = start.toLocal();
+    final to = end.toLocal();
+    return day(from) == day(to) ? day(from) : '${day(from)} → ${day(to)}';
+  }
+
+  factory TimeOff.fromJson(Map<String, dynamic> json) => TimeOff(
+        id: (json['id'] ?? json['_id'])?.toString() ?? '',
+        staffId: json['staff_id']?.toString() ?? '',
+        start: DateTime.tryParse(json['start']?.toString() ?? '')?.toUtc() ??
+            DateTime.now().toUtc(),
+        end: DateTime.tryParse(json['end']?.toString() ?? '')?.toUtc() ??
+            DateTime.now().toUtc(),
+        reason: json['reason']?.toString() ?? '',
+      );
 }
 
 /// Ce que le gérant imprime en vitrine ou envoie à ses clients.

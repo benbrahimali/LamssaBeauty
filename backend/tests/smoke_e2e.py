@@ -116,14 +116,27 @@ async def main() -> int:
         check("Salon hors rayon exclu", all(s["id"] != salon_id for s in resp.json()))
 
         # ── 4. Créneaux & réservation ────────────────────────────────────────
-        demain = (to_local(utcnow()) + timedelta(days=1)).date()
-        resp = await c.get(
-            f"/api/v1/staff/{staff_id}/slots",
-            params={"date": str(demain), "service_ids": [service_id]},
-        )
-        slots = resp.json()["slots"]
+        # Premier jour réellement ouvert : viser « demain » en dur faisait
+        # échouer le test chaque fois qu'il tombait un dimanche, jour de
+        # fermeture par défaut.
+        slots, payload = [], {}
+        jour_ouvert = (to_local(utcnow()) + timedelta(days=1)).date()
+        for offset in range(1, 8):
+            jour_ouvert = (to_local(utcnow()) + timedelta(days=offset)).date()
+            resp = await c.get(
+                f"/api/v1/staff/{staff_id}/slots",
+                params={"date": str(jour_ouvert), "service_ids": [service_id]},
+            )
+            payload = resp.json()
+            slots = payload["slots"]
+            if slots:
+                break
+
         check("Créneaux calculés", len(slots) > 0, f"{len(slots)} créneaux")
-        check("Durée = service + buffer", resp.json()["duration_min"] == 55)
+        check("Durée = service + buffer", payload.get("duration_min") == 55)
+        if not slots:
+            print("\nAucun créneau sur 7 jours — arrêt.")
+            return 1
 
         client_token = await token_for(c, "+21698333333", "Mehdi")
         start = slots[len(slots) // 2]["start"]
@@ -159,7 +172,7 @@ async def main() -> int:
 
         resp = await c.get(
             f"/api/v1/staff/{staff_id}/slots",
-            params={"date": str(demain), "service_ids": [service_id]},
+            params={"date": str(jour_ouvert), "service_ids": [service_id]},
         )
         check("Le créneau disparaît de la grille",
               all(s["start"] != start for s in resp.json()["slots"]))
@@ -282,7 +295,7 @@ async def main() -> int:
         # ── 13. Walk-in ──────────────────────────────────────────────────────
         # 08h30 : avant l'ouverture affichée (09h00). Un client de passage doit tout de
         # même pouvoir être saisi, sinon la caisse du salon devient fausse.
-        walkin_start = combine_local(demain, "08:30")
+        walkin_start = combine_local(jour_ouvert, "08:30")
         resp = await c.post(
             "/api/v1/bookings", headers=auth(owner),
             json={
@@ -321,7 +334,7 @@ async def main() -> int:
             "/api/v1/bookings", headers=auth(client_token),
             json={
                 "salon_id": salon_id, "staff_id": staff_id, "service_ids": [service_id],
-                "start": combine_local(demain, "08:30").isoformat(),
+                "start": combine_local(jour_ouvert, "08:30").isoformat(),
             },
         )
         check("RDV client hors horaires toujours refusé", resp.status_code == 409,

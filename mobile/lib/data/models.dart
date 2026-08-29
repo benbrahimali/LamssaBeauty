@@ -633,6 +633,11 @@ class Booking {
   final DateTime? start;
   final bool isWalkIn;
 
+  /// Paiement en ligne rattaché, s'il y en a un (§3.6). Nécessaire pour
+  /// proposer un remboursement : on ne rembourse pas un RDV réglé en espèces.
+  final String? paymentId;
+  final bool paid;
+
   const Booking({
     required this.id,
     this.clientName = '',
@@ -646,7 +651,13 @@ class Booking {
     this.status = BookingStatus.pending,
     this.start,
     this.isWalkIn = false,
+    this.paymentId,
+    this.paid = false,
   });
+
+  /// Seul un paiement en ligne encaissé est remboursable — le serveur refuse
+  /// le reste en 409.
+  bool get refundable => paid && paymentId != null && paymentId!.isNotEmpty;
 
   bool get isActive =>
       status == BookingStatus.pending ||
@@ -674,6 +685,8 @@ class Booking {
       status: BookingStatusExt.parse(json['status']?.toString()),
       start: start,
       isWalkIn: json['source'] == 'walkin',
+      paymentId: json['payment_id']?.toString(),
+      paid: json['payment_status'] == 'paid',
     );
   }
 }

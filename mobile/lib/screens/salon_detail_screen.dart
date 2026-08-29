@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -5,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../core/api_exception.dart';
 import '../data/models.dart';
 import '../data/repositories/salon_repository.dart';
+import '../core/env.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
@@ -131,10 +133,16 @@ class _SalonDetailScreenState extends State<SalonDetailScreen>
         ),
       ),
       child: Stack(alignment: Alignment.center, children: [
-        Text(salon.initials, style: GoogleFonts.playfairDisplay(
-          fontSize: 80, fontWeight: FontWeight.w900, color: salon.accent,
-          shadows: [Shadow(color: salon.accent.withValues(alpha: 0.4), blurRadius: 40)],
-        )),
+        // Les initiales ne sont qu'un repli : dès qu'un salon a une photo,
+        // c'est elle qui doit convaincre. Un client de salon choisit avec
+        // les yeux.
+        if (salon.photos.isEmpty)
+          Text(salon.initials, style: GoogleFonts.playfairDisplay(
+            fontSize: 80, fontWeight: FontWeight.w900, color: salon.accent,
+            shadows: [Shadow(color: salon.accent.withValues(alpha: 0.4), blurRadius: 40)],
+          ))
+        else
+          _PhotoCarousel(photos: salon.photos),
         Positioned(
           bottom: 0, left: 0, right: 0,
           child: Container(
@@ -435,5 +443,68 @@ class _TeamMemberRow extends StatelessWidget {
         ),
       ]),
     );
+  }
+}
+
+
+/// Défilé des photos du salon, en tête de fiche.
+class _PhotoCarousel extends StatefulWidget {
+  const _PhotoCarousel({required this.photos});
+
+  final List<String> photos;
+
+  @override
+  State<_PhotoCarousel> createState() => _PhotoCarouselState();
+}
+
+class _PhotoCarouselState extends State<_PhotoCarousel> {
+  final _pages = PageController();
+  int _index = 0;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(fit: StackFit.expand, children: [
+      PageView.builder(
+        controller: _pages,
+        itemCount: widget.photos.length,
+        onPageChanged: (i) => setState(() => _index = i),
+        itemBuilder: (_, i) => CachedNetworkImage(
+          imageUrl: Env.mediaUrl(widget.photos[i]),
+          fit: BoxFit.cover,
+          placeholder: (_, __) => Container(color: AppColors.card2),
+          // Une photo cassée ne doit pas laisser un rectangle vide en tête de
+          // fiche : on retombe sur un fond neutre.
+          errorWidget: (_, __, ___) => Container(color: AppColors.card2),
+        ),
+      ),
+      if (widget.photos.length > 1)
+        Positioned(
+          bottom: 68,
+          left: 0,
+          right: 0,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(widget.photos.length, (i) {
+              final active = i == _index;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.symmetric(horizontal: 3),
+                width: active ? 18 : 6,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: active ? AppColors.gold : Colors.white38,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              );
+            }),
+          ),
+        ),
+    ]);
   }
 }

@@ -261,12 +261,35 @@ async def update_salon(body: SalonUpdate, salon: Salon = Depends(owned_salon)):
     return salon
 
 
+#: Au-delà, la fiche devient un catalogue qu'on ne fait plus défiler.
+MAX_SALON_PHOTOS = 10
+
+
 @router.post("/{salon_id}/photos", summary="Ajouter une photo au salon")
 async def upload_photo(file: UploadFile, salon: Salon = Depends(owned_salon)):
+    if len(salon.photos) >= MAX_SALON_PHOTOS:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Maximum {MAX_SALON_PHOTOS} photos — supprime-en une d'abord.",
+        )
     url = await save_image(file, f"salons/{salon.id}")
     salon.photos.append(url)
     await salon.save()
     return {"url": url, "photos": salon.photos}
+
+
+@router.delete("/{salon_id}/photos", summary="Retirer une photo du salon")
+async def delete_photo(url: str, salon: Salon = Depends(owned_salon)):
+    """Une photo mal cadrée doit pouvoir être retirée, sinon elle reste à vie.
+
+    La photo est identifiée par son URL et non par un index : deux suppressions
+    concurrentes décaleraient les positions et effaceraient la mauvaise.
+    """
+    if url not in salon.photos:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo introuvable")
+    salon.photos.remove(url)
+    await salon.save()
+    return {"photos": salon.photos}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

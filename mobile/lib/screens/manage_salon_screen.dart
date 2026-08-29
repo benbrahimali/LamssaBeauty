@@ -1,13 +1,22 @@
+import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/api_exception.dart';
 import '../data/models.dart';
+import '../core/env.dart';
 import '../data/repositories/salon_admin_repository.dart';
+import '../data/repositories/salon_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/reviews_moderation_sheet.dart';
+import '../widgets/team_ranking_sheet.dart';
+import '../widgets/time_off_sheet.dart';
 
 /// Gestion du salon par son gérant : catalogue et équipe (§3.1, §3.5).
 class ManageSalonScreen extends StatefulWidget {
@@ -28,6 +37,8 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
   int _tab = 0;
   List<ServiceItem> _services = const [];
   List<Coiffeur> _team = const [];
+  List<String> _photos = const [];
+  bool _uploading = false;
   bool _loading = true;
   String? _error;
 
@@ -48,11 +59,15 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
       final results = await Future.wait([
         _repo.services(widget.salonId),
         _repo.staff(widget.salonId),
+        // La fiche publique porte déjà les photos : pas besoin d'une route
+        // dédiée pour les relire.
+        context.read<SalonRepository>().detail(widget.salonId),
       ]);
       if (!mounted) return;
       setState(() {
         _services = results[0] as List<ServiceItem>;
         _team = results[1] as List<Coiffeur>;
+        _photos = (results[2] as SalonDetail).salon.photos;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -175,15 +190,16 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           backgroundColor: AppColors.card2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(title, style: AppTextStyle.playfair(size: 17)),
           content: Text(body,
               style: AppTextStyle.dmSans(size: 13, color: AppColors.sub)),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child:
-                  Text('رجوع', style: AppTextStyle.dmSans(color: AppColors.sub)),
+              child: Text('رجوع',
+                  style: AppTextStyle.dmSans(color: AppColors.sub)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, true),
@@ -195,6 +211,97 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
         ),
       );
 
+  Widget _photosGrid() {
+    if (_photos.isEmpty) {
+      return const AppEmpty(
+        emoji: '📷',
+        title: 'ما فماش تصاور',
+        subtitle: 'الحرفاء يختارو بعينيهم — زيد تصاور الصالون',
+      );
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: _photos.length,
+      itemBuilder: (_, i) => GestureDetector(
+        onLongPress: () => _removePhoto(_photos[i]),
+        child: Stack(fit: StackFit.expand, children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: CachedNetworkImage(
+              imageUrl: Env.mediaUrl(_photos[i]),
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(color: AppColors.card2),
+              errorWidget: (_, __, ___) => Container(
+                color: AppColors.card2,
+                alignment: Alignment.center,
+                child: const Text('🖼️', style: TextStyle(fontSize: 24)),
+              ),
+            ),
+          ),
+          if (i == 0)
+            Positioned(
+              left: 8,
+              top: 8,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.gold,
+                  borderRadius: BorderRadius.circular(50),
+                ),
+                // La première photo est celle qui représente le salon partout
+                // ailleurs : le gérant doit savoir laquelle c'est.
+                child: Text('الرئيسية',
+                    style: AppTextStyle.dmSans(
+                        size: 10,
+                        color: Colors.black,
+                        weight: FontWeight.w700)),
+              ),
+            ),
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _addPhoto() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      // Réduit avant l'envoi : le serveur refuse au-delà de MAX_UPLOAD_MB, et
+      // une photo de 8 Mo prend une éternité en 3G.
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _uploading = true);
+    try {
+      final photos = await _repo.addPhoto(widget.salonId, File(picked.path));
+      if (!mounted) return;
+      setState(() => _photos = photos);
+      showAppSnack(context, 'التصويرة تزادت ✅', success: true);
+    } on ApiException catch (e) {
+      if (mounted) showAppSnack(context, e.message);
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
+  Future<void> _removePhoto(String url) async {
+    final ok = await _confirm('تنحّي التصويرة ؟', 'ما تنجّمش ترجّعها بعد.');
+    if (ok != true) return;
+    try {
+      final photos = await _repo.removePhoto(widget.salonId, url);
+      if (!mounted) return;
+      setState(() => _photos = photos);
+    } on ApiException catch (e) {
+      if (mounted) showAppSnack(context, e.message);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -203,8 +310,21 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
           ? null
           : FloatingActionButton(
               backgroundColor: AppColors.gold,
-              onPressed: () => _tab == 0 ? _editService() : _editStaff(),
-              child: const Icon(Icons.add_rounded, color: Colors.black),
+              onPressed: _uploading
+                  ? null
+                  : () => switch (_tab) {
+                        0 => _editService(),
+                        1 => _editStaff(),
+                        _ => _addPhoto(),
+                      },
+              child: _uploading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2.2, color: Colors.black),
+                    )
+                  : const Icon(Icons.add_rounded, color: Colors.black),
             ),
       body: Column(
         children: [
@@ -218,13 +338,14 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
 
   Widget _header() {
     return Padding(
-      padding:
-          EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 16, 20, 12),
+      padding: EdgeInsets.fromLTRB(
+          16, MediaQuery.of(context).padding.top + 16, 20, 12),
       child: Row(children: [
         GestureDetector(
           onTap: () => Navigator.of(context).maybePop(),
           child: Container(
-            width: 40, height: 40,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: AppColors.card,
               shape: BoxShape.circle,
@@ -236,7 +357,8 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
         ),
         const SizedBox(width: 14),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('إدارة الصالون',
                 style: AppTextStyle.dmSans(size: 12, color: AppColors.sub)),
             Text(widget.salonName,
@@ -245,12 +367,46 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
                 style: AppTextStyle.playfair(size: 20)),
           ]),
         ),
+        GestureDetector(
+          onTap: () => ReviewsModerationSheet.show(context, widget.salonId),
+          child: Container(
+            width: 40,
+            height: 40,
+            margin: const EdgeInsets.only(left: 8),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.star_rounded, size: 19, color: AppColors.gold),
+          ),
+        ),
+        // Classement réservé au gérant : outil de motivation interne, pas
+        // argument de vitrine — publié, il exposerait les moins bien notés.
+        GestureDetector(
+          onTap: () => TeamRankingSheet.show(context, widget.salonId),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(Icons.emoji_events_rounded,
+                size: 19, color: AppColors.gold),
+          ),
+        ),
       ]),
     );
   }
 
   Widget _tabs() {
-    final labels = ['الخدمات (${_services.length})', 'الفريق (${_team.length})'];
+    final labels = [
+      'الخدمات (${_services.length})',
+      'الفريق (${_team.length})',
+      'التصاور (${_photos.length})',
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
       child: Container(
@@ -274,11 +430,12 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                   alignment: Alignment.center,
-                  child: Text(labels[i], style: AppTextStyle.dmSans(
-                    size: 13,
-                    weight: active ? FontWeight.w700 : FontWeight.w400,
-                    color: active ? Colors.black : AppColors.sub,
-                  )),
+                  child: Text(labels[i],
+                      style: AppTextStyle.dmSans(
+                        size: 13,
+                        weight: active ? FontWeight.w700 : FontWeight.w400,
+                        color: active ? Colors.black : AppColors.sub,
+                      )),
                 ),
               ),
             );
@@ -291,7 +448,11 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
   Widget _body() {
     if (_loading) return const AppLoader();
     if (_error != null) return AppError(message: _error!, onRetry: _load);
-    return _tab == 0 ? _servicesList() : _teamList();
+    return switch (_tab) {
+      0 => _servicesList(),
+      1 => _teamList(),
+      _ => _photosGrid(),
+    };
   }
 
   Widget _servicesList() {
@@ -321,16 +482,20 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
             Text(service.icon, style: const TextStyle(fontSize: 22)),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style:
-                        AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
-                const SizedBox(height: 3),
-                Text('⏱ ${service.duration} دقيقة · +${service.bufferMin} فاصل',
-                    style: AppTextStyle.dmSans(size: 11, color: AppColors.sub)),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyle.dmSans(
+                            size: 14, weight: FontWeight.w700)),
+                    const SizedBox(height: 3),
+                    Text(
+                        '⏱ ${service.duration} دقيقة · +${service.bufferMin} فاصل',
+                        style: AppTextStyle.dmSans(
+                            size: 11, color: AppColors.sub)),
+                  ]),
             ),
             Text('${service.price.toStringAsFixed(0)} DT',
                 style: AppTextStyle.playfair(size: 16, color: AppColors.gold)),
@@ -376,24 +541,32 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(member.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style:
-                        AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
-                const SizedBox(height: 3),
-                Text(
-                  'كرسي ${member.chairNumber} · '
-                  'نسبة ${member.commissionPct.toStringAsFixed(0)}% · '
-                  '${member.serviceIds.isEmpty ? 'كل الخدمات' : '${member.serviceIds.length} خدمة'}',
-                  style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
-                ),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(member.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyle.dmSans(
+                            size: 14, weight: FontWeight.w700)),
+                    const SizedBox(height: 3),
+                    Text(
+                      'كرسي ${member.chairNumber} · '
+                      'نسبة ${member.commissionPct.toStringAsFixed(0)}% · '
+                      '${member.serviceIds.isEmpty ? 'كل الخدمات' : '${member.serviceIds.length} خدمة'}',
+                      style:
+                          AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+                    ),
+                  ]),
             ),
             _menu(
               onEdit: () => _editStaff(member),
               onDelete: () => _removeStaff(member),
+              onTimeOff: () => TimeOffSheet.show(
+                context,
+                salonId: widget.salonId,
+                member: member,
+              ),
             ),
           ]),
         );
@@ -401,16 +574,30 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
     );
   }
 
-  Widget _menu({required VoidCallback onEdit, required VoidCallback onDelete}) {
+  Widget _menu({
+    required VoidCallback onEdit,
+    required VoidCallback onDelete,
+    VoidCallback? onTimeOff,
+  }) {
     return PopupMenuButton<String>(
       color: AppColors.card2,
       icon: const Icon(Icons.more_vert_rounded, color: AppColors.sub, size: 20),
-      onSelected: (value) => value == 'edit' ? onEdit() : onDelete(),
+      onSelected: (value) => switch (value) {
+        'edit' => onEdit(),
+        'timeoff' => onTimeOff?.call(),
+        _ => onDelete(),
+      },
       itemBuilder: (_) => [
         PopupMenuItem(
           value: 'edit',
           child: Text('بدّل', style: AppTextStyle.dmSans(size: 13)),
         ),
+        // Absent pour les services : seuls les coiffeurs prennent des congés.
+        if (onTimeOff != null)
+          PopupMenuItem(
+            value: 'timeoff',
+            child: Text('العطل', style: AppTextStyle.dmSans(size: 13)),
+          ),
         PopupMenuItem(
           value: 'delete',
           child: Text('نحّي',
@@ -460,7 +647,8 @@ class _ServiceSheetState extends State<_ServiceSheet> {
     final e = widget.existing;
     _name = TextEditingController(text: e?.name ?? '');
     _nameAr = TextEditingController(text: e?.nameAr ?? '');
-    _price = TextEditingController(text: e == null ? '' : e.price.toStringAsFixed(0));
+    _price = TextEditingController(
+        text: e == null ? '' : e.price.toStringAsFixed(0));
     _duration = TextEditingController(text: e == null ? '30' : '${e.duration}');
     _buffer = TextEditingController(text: e == null ? '10' : '${e.bufferMin}');
   }
@@ -485,14 +673,16 @@ class _ServiceSheetState extends State<_ServiceSheet> {
             textCapitalization: TextCapitalization.words,
             style: AppTextStyle.dmSans(size: 15),
             decoration: const InputDecoration(hintText: 'Nom (Skin fade)'),
-            validator: (v) =>
-                (v ?? '').trim().length < 2 ? 'حطّ اسم (حرفين على الأقل)' : null,
+            validator: (v) => (v ?? '').trim().length < 2
+                ? 'حطّ اسم (حرفين على الأقل)'
+                : null,
           ),
           const SizedBox(height: 12),
           TextFormField(
             controller: _nameAr,
             style: AppTextStyle.dmSans(size: 15),
-            decoration: const InputDecoration(hintText: 'الاسم بالعربي (اختياري)'),
+            decoration:
+                const InputDecoration(hintText: 'الاسم بالعربي (اختياري)'),
           ),
           const SizedBox(height: 12),
           Row(children: [
@@ -651,7 +841,6 @@ class _StaffSheetState extends State<_StaffSheet> {
             validator: (v) => (v ?? '').trim().isEmpty ? 'حطّ الاسم' : null,
           ),
           const SizedBox(height: 16),
-
           _row('الكرسي', '$_chair'),
           Slider(
             value: _chair.toDouble(),
@@ -662,7 +851,6 @@ class _StaffSheetState extends State<_StaffSheet> {
             inactiveColor: AppColors.border,
             onChanged: (v) => setState(() => _chair = v.round()),
           ),
-
           _row('نسبتو', '${_commission.toStringAsFixed(0)}%'),
           Slider(
             value: _commission,
@@ -674,7 +862,6 @@ class _StaffSheetState extends State<_StaffSheet> {
             onChanged: (v) => setState(() => _commission = v),
           ),
           const SizedBox(height: 8),
-
           Align(
             alignment: Alignment.centerRight,
             child: Text(
@@ -712,12 +899,14 @@ class _StaffSheetState extends State<_StaffSheet> {
                             : AppColors.card,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: selected ? AppColors.gold : AppColors.border),
+                            color:
+                                selected ? AppColors.gold : AppColors.border),
                       ),
-                      child: Text(title, style: AppTextStyle.dmSans(
-                        size: 12,
-                        color: selected ? AppColors.gold : AppColors.text,
-                      )),
+                      child: Text(title,
+                          style: AppTextStyle.dmSans(
+                            size: 12,
+                            color: selected ? AppColors.gold : AppColors.text,
+                          )),
                     ),
                   );
                 }).toList(),
@@ -767,7 +956,8 @@ class _SheetShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
         decoration: const BoxDecoration(
@@ -778,7 +968,8 @@ class _SheetShell extends StatelessWidget {
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(
-              width: 40, height: 4,
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
                 color: AppColors.border,
                 borderRadius: BorderRadius.circular(50),

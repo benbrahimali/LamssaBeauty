@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
+import '../core/api_exception.dart';
 import '../data/models.dart';
+import '../data/repositories/salon_admin_repository.dart';
 import '../state/auth_controller.dart';
 import '../state/cash_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
+import '../widgets/expenses_sheet.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/walk_in_sheet.dart';
 
@@ -128,6 +131,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
             SliverToBoxAdapter(child: _buildHeader(cash)),
             SliverToBoxAdapter(child: _buildTotalCard(cash)),
             SliverToBoxAdapter(child: _buildWalkInButton(cash)),
+            SliverToBoxAdapter(child: _buildExpensesButton(cash)),
             SliverToBoxAdapter(child: _buildCloseButton(cash)),
             SliverToBoxAdapter(child: _buildTabBar()),
             SliverToBoxAdapter(child: _buildTabContent(cash)),
@@ -299,6 +303,71 @@ class _CaisseScreenState extends State<CaisseScreen> {
     );
   }
 
+  /// Rembourse un paiement en ligne (§3.6).
+  ///
+  /// Le mouvement d'argent se fait chez le PSP ; l'API trace l'état pour que
+  /// la caisse et le RDV restent cohérents.
+  Future<void> _refund(Booking booking) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('ترجّع الفلوس ؟', style: AppTextStyle.playfair(size: 18)),
+        content: Text(
+          '${booking.price.toStringAsFixed(0)} DT لـ ${booking.clientName}.\n'
+          'الترجيع الفعلي يصير عند مزوّد الخلاص.',
+          style: AppTextStyle.dmSans(size: 13, color: AppColors.sub)
+              .copyWith(height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('لا', style: AppTextStyle.dmSans(color: AppColors.sub)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('نعم',
+                style: AppTextStyle.dmSans(
+                    color: AppColors.red, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await context.read<SalonAdminRepository>().refund(booking.paymentId!);
+      if (!mounted) return;
+      await context.read<CashController>().load();
+      if (mounted) showAppSnack(context, 'الفلوس ترجّعت', success: true);
+    } on ApiException catch (e) {
+      if (mounted) showAppSnack(context, e.message);
+    }
+  }
+
+  Widget _buildExpensesButton(CashController cash) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: GestureDetector(
+        onTap: cash.salonId == null
+            ? null
+            : () => ExpensesSheet.show(context, cash.salonId!),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: AppColors.red.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.red.withValues(alpha: 0.3)),
+          ),
+          alignment: Alignment.center,
+          child: Text('💸 المصاريف', style: AppTextStyle.dmSans(
+            size: 14, weight: FontWeight.w700, color: AppColors.red,
+          )),
+        ),
+      ),
+    );
+  }
+
   Widget _buildCloseButton(CashController cash) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
@@ -440,6 +509,17 @@ class _CaisseScreenState extends State<CaisseScreen> {
                     style: GoogleFonts.dmSans(
                       fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.gold,
                     )),
+              // Seul un paiement en ligne encaissé se rembourse : proposer le
+              // geste sur un règlement en espèces mènerait à un 409.
+              if (booking.refundable)
+                GestureDetector(
+                  onTap: () => _refund(booking),
+                  behavior: HitTestBehavior.opaque,
+                  child: const Padding(
+                    padding: EdgeInsets.only(left: 10),
+                    child: Icon(Icons.undo_rounded, size: 18, color: AppColors.sub),
+                  ),
+                ),
             ]),
           );
         }).toList(),

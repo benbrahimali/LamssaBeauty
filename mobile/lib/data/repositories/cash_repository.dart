@@ -46,6 +46,21 @@ class CashRepository {
           query: {'salon_id': salonId},
           body: {'label': label, 'amount': amount, 'category': category});
 
+  /// Dépenses du salon, les plus récentes d'abord (§3.4).
+  ///
+  /// Sans cette liste, une dépense saisie de travers restait invisible : le
+  /// gérant ne voyait que son effet sur le total de la journée.
+  Future<List<Expense>> expenses(String salonId) async {
+    final data = await _api.get('/cash/expenses', query: {'salon_id': salonId})
+        as List;
+    return data
+        .map((e) => Expense.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
+
+  Future<void> removeExpense(String expenseId) =>
+      _api.delete('/cash/expenses/$expenseId');
+
   /// Clôture la journée : verrouille les transactions et génère le rapport.
   Future<ClosureResult> closeDay(String salonId, {String? isoDate}) async {
     final data = await _api.post('/cash/closures', body: {
@@ -162,5 +177,31 @@ class ClosureResult {
         staffTotal: (json['staff_total'] as num?)?.toDouble() ?? 0,
         advancesDeducted: (json['advances_deducted'] as num?)?.toDouble() ?? 0,
         netSalon: (json['net_salon'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+
+/// Une dépense du salon : loyer, produits, électricité…
+class Expense {
+  const Expense({
+    required this.id,
+    required this.label,
+    required this.amount,
+    this.category = 'autre',
+    this.spentAt,
+  });
+
+  final String id;
+  final String label;
+  final double amount;
+  final String category;
+  final DateTime? spentAt;
+
+  factory Expense.fromJson(Map<String, dynamic> json) => Expense(
+        id: (json['id'] ?? json['_id'])?.toString() ?? '',
+        label: json['label']?.toString() ?? '',
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        category: json['category']?.toString() ?? 'autre',
+        spentAt: DateTime.tryParse(json['spent_at']?.toString() ?? '')?.toLocal(),
       );
 }

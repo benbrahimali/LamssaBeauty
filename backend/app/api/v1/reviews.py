@@ -3,7 +3,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pymongo.errors import DuplicateKeyError
 
-from app.core.security import current_user, require_role
+from app.core.security import current_user, optional_user, require_role
 from app.models.documents import Booking, Review, Salon, StaffMember, User
 from app.models.enums import BookingStatus, NotificationType, ReviewStatus, Role
 from app.schemas.social import ReviewCreate
@@ -70,11 +70,31 @@ async def salon_reviews(
     salon_id: PydanticObjectId,
     limit: int = Query(20, ge=1, le=100),
     skip: int = Query(0, ge=0),
+    include_hidden: bool = False,
+    viewer: User | None = Depends(optional_user),
 ):
+    """Avis publiés, plus les masqués si le gérant du salon les demande.
+
+    Sans cet accès, masquer un avis serait irréversible depuis l'app : il
+    disparaîtrait de toute liste alors que l'API sait le republier.
+    """
+    query: dict = {"salon_id": salon_id}
+
+    if include_hidden:
+        salon = await Salon.get(salon_id)
+        if not salon or not viewer or salon.owner_id != viewer.id:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Seul le gérant du salon voit les avis masqués",
+            )
+        query["status"] = {
+            "$in": [ReviewStatus.PUBLISHED.value, ReviewStatus.HIDDEN.value]
+        }
+    else:
+        query["status"] = ReviewStatus.PUBLISHED.value
+
     return (
-        await Review.find(
-            Review.salon_id == salon_id, Review.status == ReviewStatus.PUBLISHED
-        )
+        await Review.find(query)
         .sort("-created_at")
         .skip(skip)
         .limit(limit)

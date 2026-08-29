@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +9,7 @@ import '../data/repositories/style_dna_repository.dart';
 import '../state/auth_controller.dart';
 import '../state/notifications_controller.dart';
 import '../state/salons_controller.dart';
+import '../core/env.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
@@ -472,10 +474,23 @@ class SalonCard extends StatelessWidget {
             ),
           ),
           child: Stack(alignment: Alignment.center, children: [
-            Text(salon.initials, style: GoogleFonts.playfairDisplay(
-              fontSize: 48, fontWeight: FontWeight.w900, color: salon.accent,
-              shadows: [Shadow(color: salon.accent.withValues(alpha: 0.5), blurRadius: 20)],
-            )),
+            // La photo prime sur les initiales : c'est elle qui fait cliquer.
+            if (salon.photos.isNotEmpty)
+              Positioned.fill(
+                child: CachedNetworkImage(
+                  imageUrl: Env.mediaUrl(salon.photos.first),
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => const SizedBox.shrink(),
+                  // En cas d'échec on ne met rien : le dégradé de la carte
+                  // reste visible, ce qui vaut mieux qu'une icône cassée.
+                  errorWidget: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              )
+            else
+              Text(salon.initials, style: GoogleFonts.playfairDisplay(
+                fontSize: 48, fontWeight: FontWeight.w900, color: salon.accent,
+                shadows: [Shadow(color: salon.accent.withValues(alpha: 0.5), blurRadius: 20)],
+              )),
             Positioned(
               top: 10, right: 10,
               child: Container(

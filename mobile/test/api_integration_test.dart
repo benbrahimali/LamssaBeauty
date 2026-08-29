@@ -520,8 +520,15 @@ void main() {
       addTearDown(() => selfie.deleteSync());
 
       if (await styleDna.isAvailable()) {
-        final result = await styleDna.analyze(selfie);
-        expect(result, isA<StyleDnaResult>());
+        // Avec une clé, l'analyse doit soit aboutir, soit échouer de façon
+        // *typée* — quota épuisé, refus du modèle, fournisseur injoignable.
+        // Ce que l'app ne doit jamais voir, c'est une exception non traduite.
+        try {
+          expect(await styleDna.analyze(selfie), isA<StyleDnaResult>());
+        } on ApiException catch (e) {
+          expect(e.statusCode, isIn([422, 429, 502, 503, 504]),
+              reason: 'échec du fournisseur, mais lisible par l’app');
+        }
         return;
       }
 

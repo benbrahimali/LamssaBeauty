@@ -70,6 +70,24 @@ pré-remplit le code OTP renvoyé par l'API et le code `000000` fonctionne toujo
 | 2.4 / 8.5 | Style DNA — analyse du selfie par modèle vision | ✅ | `services/style_dna_service.py`, `api/v1/style_dna.py` |
 | 2.4 | Liste d'attente, programme fidélité | ❌ V2 | — |
 
+### Médias : Cloudinary, photos et reels (§3.2, §3.8)
+
+Photos de salon et **reels vidéo** passent par Cloudinary quand ses clés sont
+présentes — devant S3 et le disque local, parce qu'il redimensionne et sait
+dériver la vignette d'une vidéo. Les requêtes sont **signées côté serveur** : un
+`upload_preset` non signé embarqué dans l'app laisserait n'importe qui déposer
+ce qu'il veut sur le compte, et la facturation suit le volume.
+
+Un reel est publié par un coiffeur ou par le salon, et le fil est **public** —
+un visiteur sans compte doit pouvoir regarder, sinon les reels n'attirent
+personne. La durée est plafonnée à `REEL_MAX_SECONDS` (90 s) et vérifiée sur la
+**mesure de Cloudinary**, jamais sur une valeur déclarée par le client. Une
+vidéo refusée est supprimée du fournisseur : sinon on paierait le stockage d'un
+média que personne ne verra.
+
+Sans clés Cloudinary, les médias retombent sur `./media` et l'API les sert
+elle-même : le développement ne dépend d'aucun compte externe.
+
 ### Partage par QR (§3.2, §8.3)
 
 Chaque salon a un **code public court** (`BARBIE GV28`) que le gérant imprime en
@@ -154,12 +172,12 @@ l'accueil masque la carte : le reste de l'app fonctionne à l'identique.
 
 ```bash
 cd backend
-python -m pytest -q          # 168 tests unitaires, sans MongoDB ni Redis
+python -m pytest -q          # 192 tests unitaires, sans MongoDB ni Redis
 python -m tests.smoke_e2e    # 51 assertions bout en bout (mongo + redis requis)
 
 cd ../mobile
 flutter analyze                                  # 0 issue
-flutter test --exclude-tags integration          # 37 tests unitaires
+flutter test --exclude-tags integration          # 46 tests unitaires
 flutter test --tags integration \
   --dart-define=API_BASE_URL=http://127.0.0.1:8000   # 39 tests contre l'API réelle
 ```

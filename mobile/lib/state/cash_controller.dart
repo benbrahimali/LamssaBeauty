@@ -40,6 +40,10 @@ class CashController extends ChangeNotifier {
   String? get error => _error;
   bool get hasSalon => _salonId != null;
 
+  /// Salon actif — nécessaire aux écrans qui interrogent l'API directement
+  /// (les dépenses, par exemple).
+  String? get salonId => _salonId;
+
   void attach(String? salonId) {
     if (_salonId == salonId) return;
     _salonId = salonId;

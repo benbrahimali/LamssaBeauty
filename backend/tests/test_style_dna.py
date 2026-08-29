@@ -146,7 +146,23 @@ def test_les_coupes_sont_triees_par_pertinence():
 
 
 # ── Garde-fous avant tout appel réseau ───────────────────────────────────────
-def test_sans_cle_api_le_service_se_declare_indisponible():
+@pytest.fixture
+def sans_cle():
+    """Force l'absence de clé API.
+
+    Sans ce garde-fou, ces tests dépendaient de la machine : dès qu'une clé
+    réelle apparaît dans `.env`, ils partent appeler l'API — un test unitaire
+    qui touche au réseau, et qui facture.
+    """
+    from app.core.config import settings
+
+    original = settings.ANTHROPIC_API_KEY
+    settings.ANTHROPIC_API_KEY = ""
+    yield
+    settings.ANTHROPIC_API_KEY = original
+
+
+def test_sans_cle_api_le_service_se_declare_indisponible(sans_cle):
     assert is_configured() is False
 
 
@@ -163,8 +179,20 @@ def test_selfie_trop_lourd_refuse():
     assert exc.value.status_code == 413
 
 
-def test_sans_cle_api_l_analyse_renvoie_503():
+def test_sans_cle_api_l_analyse_renvoie_503(sans_cle):
     """La taille et le format sont valides : c'est bien la clé qui manque."""
     with pytest.raises(HTTPException) as exc:
         asyncio.run(analyze_selfie(b"fake-jpeg-bytes", "image/jpeg"))
     assert exc.value.status_code == 503
+
+
+def test_avec_une_cle_la_fonctionnalite_se_declare_disponible():
+    """L'inverse du garde-fou : la présence d'une clé doit suffire à l'annoncer."""
+    from app.core.config import settings
+
+    original = settings.ANTHROPIC_API_KEY
+    settings.ANTHROPIC_API_KEY = "sk-ant-test"
+    try:
+        assert is_configured() is True
+    finally:
+        settings.ANTHROPIC_API_KEY = original
