@@ -7,8 +7,11 @@ import '../data/models.dart';
 import '../data/repositories/salon_admin_repository.dart';
 import '../state/auth_controller.dart';
 import '../theme/app_theme.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
 import '../core/location.dart';
 import '../widgets/async_states.dart';
+import 'location_picker_screen.dart';
 import '../widgets/common_widgets.dart';
 
 /// Onboarding salon (§3.1) — le gérant crée son salon depuis le téléphone.
@@ -63,10 +66,36 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
     }
   }
 
+  /// Ajuste la position sur la carte.
+  ///
+  /// Le GPS place le salon là où se tient le gérant — parfois à l'étage, ou à
+  /// cinquante mètres près en ville. Cette position décide de l'apparition du
+  /// salon dans les recherches « près de moi » : elle mérite un réglage fin.
+  Future<void> _pickOnMap() async {
+    final choisi = await Navigator.of(context).push<PickedLocation>(
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initial: _lat != null && _lng != null ? LatLng(_lat!, _lng!) : null,
+        ),
+      ),
+    );
+    if (choisi == null || !mounted) return;
+    setState(() {
+      _lat = choisi.lat;
+      _lng = choisi.lng;
+      // L'adresse lue sur la carte ne remplace pas ce que le gérant a saisi :
+      // il connaît son quartier mieux qu'un géocodeur inverse.
+      if (choisi.address.isNotEmpty && _addressCtrl.text.trim().isEmpty) {
+        _addressCtrl.text = choisi.address;
+      }
+    });
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_lat == null || _lng == null) {
-      showAppSnack(context, 'Enregistre la position du salon avant de continuer');
+      showAppSnack(
+          context, 'Enregistre la position du salon avant de continuer');
       return;
     }
 
@@ -123,7 +152,6 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
                         : null,
                   ),
                   const SizedBox(height: 20),
-
                   _label('نوع الصالون'),
                   Wrap(
                     spacing: 8,
@@ -141,19 +169,24 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
                                 : AppColors.card,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                                color: selected ? AppColors.gold : AppColors.border),
+                                color: selected
+                                    ? AppColors.gold
+                                    : AppColors.border),
                           ),
-                          child: Text(type.label, style: AppTextStyle.dmSans(
-                            size: 12,
-                            weight: selected ? FontWeight.w700 : FontWeight.w400,
-                            color: selected ? AppColors.gold : AppColors.text,
-                          )),
+                          child: Text(type.label,
+                              style: AppTextStyle.dmSans(
+                                size: 12,
+                                weight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w400,
+                                color:
+                                    selected ? AppColors.gold : AppColors.text,
+                              )),
                         ),
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 20),
-
                   _label('المدينة'),
                   TextFormField(
                     controller: _cityCtrl,
@@ -162,7 +195,6 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
                     decoration: const InputDecoration(hintText: 'Tunis'),
                   ),
                   const SizedBox(height: 16),
-
                   _label('العنوان'),
                   TextFormField(
                     controller: _addressCtrl,
@@ -171,7 +203,6 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
                         const InputDecoration(hintText: 'Av. Habib Bourguiba'),
                   ),
                   const SizedBox(height: 16),
-
                   _label('الهاتف'),
                   TextFormField(
                     controller: _phoneCtrl,
@@ -184,16 +215,13 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
                     decoration: const InputDecoration(hintText: '71 000 000'),
                   ),
                   const SizedBox(height: 20),
-
                   _buildLocation(),
+                  _buildMapButton(),
                   const SizedBox(height: 24),
-
                   _buildSplit(),
                   const SizedBox(height: 20),
-
                   _buildCancelWindow(),
                   const SizedBox(height: 32),
-
                   _saving
                       ? const AppLoader()
                       : GoldButton(text: 'أنشئ الصالون', onPressed: _submit),
@@ -201,7 +229,8 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
                   Center(
                     child: Text(
                       'تنجم تبدّل كل شيء من بعد.',
-                      style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+                      style:
+                          AppTextStyle.dmSans(size: 11, color: AppColors.sub),
                     ),
                   ),
                 ],
@@ -215,13 +244,14 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
 
   Widget _header() {
     return Padding(
-      padding:
-          EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 16, 20, 12),
+      padding: EdgeInsets.fromLTRB(
+          16, MediaQuery.of(context).padding.top + 16, 20, 12),
       child: Row(children: [
         GestureDetector(
           onTap: () => Navigator.of(context).maybePop(),
           child: Container(
-            width: 40, height: 40,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: AppColors.card,
               shape: BoxShape.circle,
@@ -255,7 +285,8 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
         Text(located ? '📍' : '🗺️', style: const TextStyle(fontSize: 24)),
         const SizedBox(width: 14),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(located ? 'الموقع تسجّل' : 'موقع الصالون',
                 style: AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
             const SizedBox(height: 2),
@@ -279,11 +310,12 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
             ),
             child: _locating
                 ? const SizedBox(
-                    width: 14, height: 14,
+                    width: 14,
+                    height: 14,
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: AppColors.gold),
                   )
-                : Text(located ? 'بدّل' : 'سجّل موقعي',
+                : Text(located ? 'بدّل' : 'موقعي الحالي',
                     style: AppTextStyle.dmSans(
                       size: 12,
                       weight: FontWeight.w700,
@@ -292,6 +324,40 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
           ),
         ),
       ]),
+    );
+  }
+
+  /// Ouverture de la carte, sous le bloc position.
+  ///
+  /// Deux chemins distincts et complémentaires : le GPS pour aller vite, la
+  /// carte pour poser le point exactement sur la porte du salon.
+  Widget _buildMapButton() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: GestureDetector(
+        onTap: _pickOnMap,
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border),
+          ),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.map_rounded, size: 18, color: AppColors.gold),
+              const SizedBox(width: 8),
+              Text('اختار على الخريطة',
+                  style: AppTextStyle.dmSans(
+                      size: 13,
+                      weight: FontWeight.w700,
+                      color: AppColors.gold)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
