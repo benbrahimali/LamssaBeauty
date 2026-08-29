@@ -59,6 +59,16 @@ class CashRepository {
     return Pnl.fromJson(data);
   }
 
+  /// Pilotage : le résultat, plus les repères qui lui donnent un sens.
+  Future<Pilot> pilot(String salonId, {DateTime? start, DateTime? end}) async {
+    final data = await _api.get('/cash/pilot', query: {
+      'salon_id': salonId,
+      if (start != null) 'start': _isoDay(start),
+      if (end != null) 'end': _isoDay(end),
+    }) as Map<String, dynamic>;
+    return Pilot.fromJson(data);
+  }
+
   /// Charges fixes du salon, avec leur équivalent mensuel.
   Future<({List<RecurringCharge> charges, double monthlyEquivalent})> charges(
     String salonId, {
@@ -455,5 +465,64 @@ class Pnl {
           (k, v) => MapEntry(k.toString(), (v as num?)?.toDouble() ?? 0),
         ),
         transactionCount: (json['transaction_count'] as num?)?.toInt() ?? 0,
+      );
+}
+
+
+/// Le compte de résultat replacé dans son contexte : seuil et objectif.
+///
+/// Un résultat seul ne dit pas s'il est bon — il faut savoir à partir de
+/// combien le salon gagne de l'argent, et si le rythme suffira.
+class Pilot {
+  const Pilot({
+    required this.pnl,
+    this.breakEven,
+    this.breakEvenReached = false,
+    this.missingToBreakEven,
+    this.staffRatio = 0,
+    this.target,
+    this.targetProgressPct,
+    this.projectedRevenue,
+    this.daysElapsed = 0,
+    this.daysTotal = 0,
+    this.onTrack,
+  });
+
+  final Pnl pnl;
+
+  /// Chiffre d'affaires à partir duquel le salon couvre ses charges.
+  /// Null quand il n'y a pas de charges, ou quand tout part à l'équipe :
+  /// aucun volume ne couvrirait alors quoi que ce soit.
+  final double? breakEven;
+  final bool breakEvenReached;
+  final double? missingToBreakEven;
+
+  /// Part reversée à l'équipe, en pourcentage — c'est elle qui fixe le seuil.
+  final double staffRatio;
+
+  /// Null si le gérant n'a pas fixé d'objectif : on n'en invente pas.
+  final double? target;
+  final double? targetProgressPct;
+
+  /// Null sous un jour de recul : une matinée n'annonce pas un mois.
+  final double? projectedRevenue;
+  final double daysElapsed;
+  final double daysTotal;
+
+  /// Le rythme suffit-il, à cette date, pour tenir l'objectif ?
+  final bool? onTrack;
+
+  factory Pilot.fromJson(Map<String, dynamic> json) => Pilot(
+        pnl: Pnl.fromJson(json),
+        breakEven: (json['break_even'] as num?)?.toDouble(),
+        breakEvenReached: json['break_even_reached'] == true,
+        missingToBreakEven: (json['missing_to_break_even'] as num?)?.toDouble(),
+        staffRatio: (json['staff_ratio'] as num?)?.toDouble() ?? 0,
+        target: (json['target'] as num?)?.toDouble(),
+        targetProgressPct: (json['target_progress_pct'] as num?)?.toDouble(),
+        projectedRevenue: (json['projected_revenue'] as num?)?.toDouble(),
+        daysElapsed: (json['days_elapsed'] as num?)?.toDouble() ?? 0,
+        daysTotal: (json['days_total'] as num?)?.toDouble() ?? 0,
+        onTrack: json['on_track'] as bool?,
       );
 }

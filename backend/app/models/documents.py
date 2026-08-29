@@ -89,6 +89,11 @@ class Salon(Document):
     # Caisse (§3.4)
     default_split_pct: float = 50.0
 
+    # Objectif de chiffre d'affaires mensuel, fixé par le gérant. Zéro = pas
+    # d'objectif : on n'invente pas une cible à sa place, il n'y aurait aucune
+    # raison de la croire.
+    monthly_revenue_target: float = 0.0
+
     # Chaque salon nomme ses postes de dépense comme il les tient dans son
     # cahier : imposer une liste unique obligerait à tout ranger dans « autre ».
     expense_categories: list[str] = Field(

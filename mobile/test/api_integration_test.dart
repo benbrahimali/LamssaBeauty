@@ -645,6 +645,57 @@ void main() {
       expect(apres.revenue, closeTo(avant.revenue, 0.01));
     });
 
+    test('le seuil de rentabilité tient compte de la part reversée', () async {
+      final charge = await cash.addCharge(
+        salonId,
+        label: 'Loyer seuil',
+        amount: 1000,
+        period: 'monthly',
+      );
+      addTearDown(() => cash.deleteCharge(charge.id));
+
+      final p = await cash.pilot(salonId);
+      expect(p.breakEven, isNotNull);
+
+      // À x % reversés, il faut encaisser charges / (1 − x) pour les couvrir.
+      final attendu = (p.pnl.expenses + p.pnl.recurringCharges) /
+          (1 - p.staffRatio / 100);
+      // Tolérance relative : le ratio exposé est arrondi au dixième de pour
+      // cent pour l'affichage, alors que le serveur calcule en précision
+      // pleine. 0,5 % laisse passer cet écart mais pas une erreur de formule,
+      // qui se tromperait d'un facteur deux.
+      expect(p.breakEven!, closeTo(attendu, attendu * 0.005));
+    });
+
+    test('sans charge, il n’y a pas de seuil à atteindre', () async {
+      // Le salon gagne dès la première coupe : afficher un seuil de zéro
+      // serait plus déroutant qu'utile.
+      for (final c in (await cash.charges(salonId)).charges) {
+        await cash.setChargeActive(c.id, false);
+      }
+      addTearDown(() async {
+        for (final c in (await cash.charges(salonId, includeInactive: true)).charges) {
+          await cash.setChargeActive(c.id, true);
+        }
+      });
+
+      final p = await cash.pilot(salonId);
+      expect(p.breakEven, isNull);
+    });
+
+    test('l’objectif se fixe et se retire', () async {
+      final admin = SalonAdminRepository(api);
+      await admin.updateSalon(salonId, monthlyRevenueTarget: 5000);
+      var p = await cash.pilot(salonId);
+      expect(p.target, closeTo(5000, 0.01));
+      expect(p.targetProgressPct, isNotNull);
+
+      await admin.updateSalon(salonId, monthlyRevenueTarget: 0);
+      p = await cash.pilot(salonId);
+      expect(p.target, isNull, reason: 'zéro retire l’objectif');
+      expect(p.onTrack, isNull, reason: 'sans cible, pas de verdict');
+    });
+
     test('les comptes du résultat s’additionnent', () async {
       final p = await cash.pnl(salonId);
 

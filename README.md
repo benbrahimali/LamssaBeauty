@@ -99,6 +99,33 @@ gonflerait le résultat du salon. Ils restent affichés à part.
 Une charge se **désactive**, elle ne se supprime pas : les mois déjà analysés
 gardent des comptes justes.
 
+### Pilotage : seuil de rentabilité et objectif (§3.4)
+
+Un résultat seul ne dit pas s'il est bon. `GET /cash/pilot` ajoute les deux
+repères qui lui donnent un sens.
+
+Le **seuil de rentabilité** dépend de ce que le salon reverse à son équipe :
+
+```
+seuil = charges fixes / (1 − part reversée)
+```
+
+À 50 % de commission, chaque dinar encaissé n'en laisse que 50 centimes pour
+couvrir le loyer : il faut donc encaisser **le double** des charges. Un salon
+qui emploie des salariés atteint son seuil bien plus tôt. C'est pourquoi aucun
+seuil universel n'aurait de sens — et c'est le calcul que les gérants font de
+tête, souvent faux.
+
+Deux cas rendent le seuil inexistant, et l'app le dit plutôt que d'afficher un
+chiffre trompeur : aucune charge — le salon gagne dès la première coupe — ou
+100 % reversé à l'équipe, où aucun volume ne couvrirait quoi que ce soit.
+
+L'**objectif** est facultatif et fixé par le gérant : on n'en invente pas à sa
+place, il n'y aurait aucune raison de le croire. Il est jugé **au prorata du
+temps écoulé** — comparer le réalisé à l'objectif entier afficherait « en
+retard » tout le mois. La projection reste muette sous un jour de recul : une
+grosse matinée annoncerait un mois record.
+
 ### Médias : Cloudinary, photos et reels (§3.2, §3.8)
 
 Photos de salon et **reels vidéo** passent par Cloudinary quand ses clés sont
@@ -201,14 +228,14 @@ l'accueil masque la carte : le reste de l'app fonctionne à l'identique.
 
 ```bash
 cd backend
-python -m pytest -q          # 237 tests unitaires, sans MongoDB ni Redis
+python -m pytest -q          # 249 tests unitaires, sans MongoDB ni Redis
 python -m tests.smoke_e2e    # 51 assertions bout en bout (mongo + redis requis)
 
 cd ../mobile
 flutter analyze                                  # 0 issue
 flutter test --exclude-tags integration          # 77 tests unitaires
 flutter test --tags integration \
-  --dart-define=API_BASE_URL=http://127.0.0.1:8000   # 45 tests contre l'API réelle
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000   # 48 tests contre l'API réelle
 ```
 
 Le cœur métier (split, créneaux, transitions, agrégation de caisse, normalisation

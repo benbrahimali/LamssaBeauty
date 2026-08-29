@@ -341,6 +341,73 @@ async def profit_and_loss(
     }
 
 
+async def pilot(
+    salon,
+    start: datetime,
+    end: datetime,
+    now: datetime | None = None,
+) -> dict:
+    """Pilotage : où en est le salon par rapport à son seuil et à son objectif.
+
+    Le seuil de rentabilité dépend de ce que le salon reverse à son équipe.
+    À 50 % de commission, chaque dinar encaissé n'en laisse que 50 centimes
+    pour couvrir le loyer : il faut donc encaisser le double des charges. Un
+    salon qui emploie des salariés — commission nulle — atteint son seuil bien
+    plus tôt. C'est pour ça qu'aucun seuil universel n'aurait de sens.
+    """
+    compte = await profit_and_loss(salon.id, start, end)
+
+    charges_fixes = compte["expenses"] + compte["recurring_charges"]
+    revenus = compte["revenue"]
+
+    # Part reversée à l'équipe, mesurée sur la période. Sans activité, on
+    # retombe sur le partage par défaut du salon : c'est ce qu'il applique.
+    part_equipe = (
+        compte["staff_share"] / revenus if revenus > 0 else salon.default_split_pct / 100
+    )
+    marge_unitaire = 1 - part_equipe
+
+    # Marge nulle ou négative : aucun volume ne couvrirait les charges. Le dire
+    # vaut mieux qu'afficher un seuil astronomique ou une division par zéro.
+    seuil = (
+        round(charges_fixes / marge_unitaire, 2)
+        if marge_unitaire > 0.01 and charges_fixes > 0
+        else None
+    )
+
+    maintenant = now or utcnow()
+    jours_total = max((end - start).total_seconds() / 86400, 0.0)
+    jours_ecoules = min(max((maintenant - start).total_seconds() / 86400, 0.0), jours_total)
+
+    # Projection au rythme observé. Sous un jour de recul, elle dirait
+    # n'importe quoi : une grosse matinée annoncerait un mois record.
+    projection = (
+        round(revenus * jours_total / jours_ecoules, 2) if jours_ecoules >= 1 else None
+    )
+
+    objectif = salon.monthly_revenue_target or 0.0
+
+    return {
+        **compte,
+        "break_even": seuil,
+        "break_even_reached": seuil is not None and revenus >= seuil,
+        "missing_to_break_even": round(max(seuil - revenus, 0), 2) if seuil else None,
+        "staff_ratio": round(part_equipe * 100, 1),
+        "target": objectif or None,
+        "target_progress_pct": round(100 * revenus / objectif, 1) if objectif else None,
+        "projected_revenue": projection,
+        "days_elapsed": round(jours_ecoules, 1),
+        "days_total": round(jours_total, 1),
+        # Le rythme suffit-il ? Comparer le réalisé à ce qu'il faudrait avoir
+        # atteint à cette date, plutôt qu'à l'objectif entier.
+        "on_track": (
+            None
+            if not objectif or jours_ecoules < 1
+            else revenus >= objectif * jours_ecoules / jours_total
+        ),
+    }
+
+
 async def payroll(
     *,
     staff_ids: list[PydanticObjectId],

@@ -211,3 +211,147 @@ async def test_chaque_charge_montre_son_montant_reel_et_son_prorata(donnees):
     ligne = p["charges"][0]
     assert ligne["amount"] == 900, "ce que le gérant paie vraiment"
     assert ligne["prorated"] == pytest.approx(206.98, abs=0.05), "ce que la semaine coûte"
+
+
+# ── Pilotage : seuil de rentabilité et objectif ──────────────────────────────
+@dataclass
+class FakeSalon:
+    id: str = "salon"
+    default_split_pct: float = 50.0
+    monthly_revenue_target: float = 0.0
+
+
+async def _pilot(salon=None, jours=30.4375, ecoules=None):
+    debut = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    maintenant = debut + timedelta(days=ecoules if ecoules is not None else jours)
+    return await cash_service.pilot(
+        salon or FakeSalon(),
+        debut,
+        debut + timedelta(days=jours),
+        now=maintenant,
+    )
+
+
+@pytest.mark.asyncio
+async def test_le_seuil_double_les_charges_quand_la_moitie_part_a_l_equipe(donnees):
+    """À 50 % de commission, chaque dinar encaissé n'en laisse que 50 centimes.
+
+    Il faut donc encaisser deux fois les charges pour les couvrir — c'est le
+    calcul que les gérants font de tête, et qu'ils font souvent faux.
+    """
+    donnees.txs = [FakeTx(amount=1000, staff_share=500)]
+    donnees.charges = [FakeCharge("Loyer", 900)]
+
+    p = await _pilot()
+    assert p["staff_ratio"] == pytest.approx(50, abs=0.1)
+    assert p["break_even"] == pytest.approx(1800, abs=2)
+
+
+@pytest.mark.asyncio
+async def test_un_salon_de_salaries_atteint_son_seuil_bien_plus_tot(donnees):
+    """Sans commission, chaque dinar encaissé couvre un dinar de charges."""
+    donnees.txs = [FakeTx(amount=1000, staff_share=0)]
+    donnees.charges = [FakeCharge("Salaires", 900)]
+
+    p = await _pilot()
+    assert p["break_even"] == pytest.approx(900, abs=2)
+
+
+@pytest.mark.asyncio
+async def test_sans_activite_le_seuil_utilise_le_partage_du_salon(donnees):
+    """Un salon qui démarre n'a aucune donnée : sa règle de split fait foi."""
+    donnees.charges = [FakeCharge("Loyer", 600)]
+
+    p = await _pilot(FakeSalon(default_split_pct=40))
+    assert p["staff_ratio"] == pytest.approx(40, abs=0.1)
+    assert p["break_even"] == pytest.approx(1000, abs=2), "600 / 0,60"
+
+
+@pytest.mark.asyncio
+async def test_sans_charge_il_n_y_a_pas_de_seuil(donnees):
+    """Aucune charge : le salon gagne dès la première coupe."""
+    donnees.txs = [FakeTx(amount=100, staff_share=50)]
+    p = await _pilot()
+    assert p["break_even"] is None
+
+
+@pytest.mark.asyncio
+async def test_si_tout_part_a_l_equipe_aucun_volume_ne_couvre_les_charges(donnees):
+    """Le dire vaut mieux qu'afficher un seuil astronomique.
+
+    À 100 % de commission, le salon ne garde rien : multiplier les clients
+    n'y changerait rien, c'est le partage qu'il faut revoir.
+    """
+    donnees.txs = [FakeTx(amount=1000, staff_share=1000)]
+    donnees.charges = [FakeCharge("Loyer", 900)]
+
+    p = await _pilot()
+    assert p["break_even"] is None
+
+
+@pytest.mark.asyncio
+async def test_le_manque_pour_atteindre_le_seuil_est_chiffre(donnees):
+    donnees.txs = [FakeTx(amount=1000, staff_share=500)]
+    donnees.charges = [FakeCharge("Loyer", 900)]
+
+    p = await _pilot()
+    assert p["break_even_reached"] is False
+    assert p["missing_to_break_even"] == pytest.approx(800, abs=2)
+
+
+@pytest.mark.asyncio
+async def test_le_manque_tombe_a_zero_une_fois_le_seuil_franchi(donnees):
+    donnees.txs = [FakeTx(amount=4000, staff_share=2000)]
+    donnees.charges = [FakeCharge("Loyer", 900)]
+
+    p = await _pilot()
+    assert p["break_even_reached"] is True
+    assert p["missing_to_break_even"] == 0
+
+
+@pytest.mark.asyncio
+async def test_la_projection_extrapole_le_rythme_observe(donnees):
+    """À mi-parcours, un mois se projette au double de ce qui est réalisé."""
+    donnees.txs = [FakeTx(amount=1500, staff_share=750)]
+    p = await _pilot(jours=30, ecoules=15)
+    assert p["projected_revenue"] == pytest.approx(3000, abs=1)
+
+
+@pytest.mark.asyncio
+async def test_aucune_projection_sous_un_jour_de_recul(donnees):
+    """Une grosse matinée annoncerait un mois record : mieux vaut se taire."""
+    donnees.txs = [FakeTx(amount=300, staff_share=150)]
+    p = await _pilot(jours=30, ecoules=0.5)
+    assert p["projected_revenue"] is None
+
+
+@pytest.mark.asyncio
+async def test_l_objectif_se_juge_au_prorata_du_temps_ecoule(donnees):
+    """Comparer le réalisé à l'objectif entier dirait « en retard » tout le mois.
+
+    Ce qui compte est d'avoir atteint la part correspondant à la date.
+    """
+    donnees.txs = [FakeTx(amount=1600, staff_share=800)]
+    salon = FakeSalon(monthly_revenue_target=3000)
+
+    p = await _pilot(salon, jours=30, ecoules=15)
+    assert p["target_progress_pct"] == pytest.approx(53.3, abs=0.2)
+    assert p["on_track"] is True, "1600 dépasse la moitié de 3000"
+
+
+@pytest.mark.asyncio
+async def test_un_rythme_insuffisant_est_signale(donnees):
+    donnees.txs = [FakeTx(amount=1000, staff_share=500)]
+    salon = FakeSalon(monthly_revenue_target=3000)
+
+    p = await _pilot(salon, jours=30, ecoules=15)
+    assert p["on_track"] is False
+
+
+@pytest.mark.asyncio
+async def test_sans_objectif_on_n_en_invente_pas(donnees):
+    """Une cible inventée n'aurait aucune raison d'être crue."""
+    p = await _pilot(FakeSalon(monthly_revenue_target=0))
+    assert p["target"] is None
+    assert p["target_progress_pct"] is None
+    assert p["on_track"] is None

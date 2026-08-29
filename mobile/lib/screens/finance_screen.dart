@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/api_exception.dart';
 import '../data/repositories/cash_repository.dart';
+import '../data/repositories/salon_admin_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 
@@ -25,7 +26,7 @@ class FinanceScreen extends StatefulWidget {
 }
 
 class _FinanceScreenState extends State<FinanceScreen> {
-  Pnl? _pnl;
+  Pilot? _pilot;
   List<RecurringCharge> _charges = const [];
   double _monthlyCharges = 0;
   bool _loading = true;
@@ -55,7 +56,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
     try {
       final p = _period;
       final results = await Future.wait([
-        _repo.pnl(widget.salonId, start: p.start, end: p.end),
+        _repo.pilot(widget.salonId, start: p.start, end: p.end),
         _repo.charges(widget.salonId),
       ]);
       if (!mounted) return;
@@ -64,7 +65,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
         double monthlyEquivalent
       });
       setState(() {
-        _pnl = results[0] as Pnl;
+        _pilot = results[0] as Pilot;
         _charges = charges.charges;
         _monthlyCharges = charges.monthlyEquivalent;
         _loading = false;
@@ -102,7 +103,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
     if (_loading) return const AppLoader();
     if (_error != null) return AppError(message: _error!, onRetry: _load);
 
-    final pnl = _pnl!;
+    final pilot = _pilot!;
+    final pnl = pilot.pnl;
     return RefreshIndicator(
       color: AppColors.gold,
       backgroundColor: AppColors.card,
@@ -113,6 +115,25 @@ class _FinanceScreenState extends State<FinanceScreen> {
           _buildMonthPicker(),
           const SizedBox(height: 14),
           _buildResultCard(pnl),
+          const SizedBox(height: 14),
+          // Avant le détail comptable : à partir de combien le salon gagne
+          // sa vie, et où il en est.
+          _buildBreakEven(pilot),
+          const SizedBox(height: 12),
+          if (pilot.target != null)
+            _buildTarget(pilot)
+          else
+            // Sans cette invite, la carte objectif ne s'afficherait jamais :
+            // le gérant n'aurait aucun moyen d'en fixer un.
+            GestureDetector(
+              onTap: _editTarget,
+              child: _infoCard(
+                icone: Icons.flag_rounded,
+                couleur: AppColors.gold,
+                titre: 'حدّد هدف شهري',
+                texte: 'باش نقولك كل يوم واش راك في النسق ولا لا.',
+              ),
+            ),
           const SizedBox(height: 16),
           _buildBreakdown(pnl),
           if (pnl.byCategory.isNotEmpty) ...[
@@ -190,6 +211,165 @@ class _FinanceScreenState extends State<FinanceScreen> {
           '${pnl.marginPct.toStringAsFixed(1)} % من رقم المعاملات · '
           '${pnl.transactionCount} خدمة',
           style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+        ),
+      ]),
+    );
+  }
+
+  /// Seuil de rentabilité : le repère que le gérant calcule de tête, et
+  /// souvent faux — il oublie que la moitié de chaque dinar part à l'équipe.
+  Widget _buildBreakEven(Pilot pilot) {
+    final seuil = pilot.breakEven;
+    if (seuil == null) {
+      // Deux cas : aucune charge — il gagne dès la première coupe — ou tout
+      // part à l'équipe, et aucun volume n'y changerait rien.
+      final toutALEquipe = pilot.staffRatio >= 99;
+      return _infoCard(
+        icone: toutALEquipe ? Icons.warning_amber_rounded : Icons.check_circle_rounded,
+        couleur: toutALEquipe ? AppColors.red : AppColors.green,
+        titre: toutALEquipe ? 'ما فماش عتبة' : 'ما عندكش مصاريف قارة',
+        texte: toutALEquipe
+            ? 'كل مليم يمشي للفريق : زيادة الحرفاء ما تبدّل والو، لازم تراجع '
+                'نسبة التقسيم.'
+            : 'كل خدمة ربح مباشر. زيد مصاريفك القارة باش نحسبولك العتبة.',
+      );
+    }
+
+    final part = (pilot.pnl.revenue / seuil).clamp(0.0, 1.0);
+    final atteint = pilot.breakEvenReached;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text('عتبة الربح', style: AppTextStyle.dmSans(weight: FontWeight.w700)),
+          const Spacer(),
+          Text('${seuil.toStringAsFixed(0)} DT',
+              style: AppTextStyle.dmSans(
+                  weight: FontWeight.w700, color: AppColors.gold)),
+        ]),
+        const SizedBox(height: 4),
+        Text(
+          // La part reversée explique le seuil : sans elle, le chiffre paraît
+          // arbitraire.
+          'مصاريفك القارة، و ${pilot.staffRatio.toStringAsFixed(0)} % من كل '
+          'مليم يمشي للفريق',
+          style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+        ),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: part,
+            minHeight: 8,
+            backgroundColor: AppColors.card2,
+            valueColor: AlwaysStoppedAnimation(
+                atteint ? AppColors.green : AppColors.gold),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          atteint
+              ? '✅ العتبة تعدّات — كل خدمة زايدة ربح صافي'
+              : 'باقي ${pilot.missingToBreakEven!.toStringAsFixed(0)} DT '
+                  'باش تغطّي مصاريفك',
+          style: AppTextStyle.dmSans(
+              size: 12, color: atteint ? AppColors.green : AppColors.sub),
+        ),
+      ]),
+    );
+  }
+
+  Widget _buildTarget(Pilot pilot) {
+    final progression = (pilot.targetProgressPct ?? 0) / 100;
+    final dansLesTemps = pilot.onTrack ?? true;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text('🎯 الهدف', style: AppTextStyle.dmSans(weight: FontWeight.w700)),
+          const Spacer(),
+          Text('${pilot.target!.toStringAsFixed(0)} DT',
+              style: AppTextStyle.dmSans(weight: FontWeight.w700)),
+          GestureDetector(
+            onTap: _editTarget,
+            behavior: HitTestBehavior.opaque,
+            child: const Padding(
+              padding: EdgeInsets.only(left: 8),
+              child: Icon(Icons.edit_rounded, size: 15, color: AppColors.sub),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progression.clamp(0.0, 1.0),
+            minHeight: 8,
+            backgroundColor: AppColors.card2,
+            valueColor: AlwaysStoppedAnimation(
+                dansLesTemps ? AppColors.green : AppColors.red),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(children: [
+          Text('${(pilot.targetProgressPct ?? 0).toStringAsFixed(0)} %',
+              style: AppTextStyle.dmSans(
+                  size: 12,
+                  color: dansLesTemps ? AppColors.green : AppColors.red,
+                  weight: FontWeight.w700)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              // La projection est plus parlante que le pourcentage brut : elle
+              // dit où le mois finira si rien ne change.
+              pilot.projectedRevenue == null
+                  ? 'ما زال بكري باش نتوقّعو'
+                  : 'بهالنسق: ${pilot.projectedRevenue!.toStringAsFixed(0)} DT '
+                      'في آخر الشهر',
+              style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+            ),
+          ),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _infoCard({
+    required IconData icone,
+    required Color couleur,
+    required String titre,
+    required String texte,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: couleur.withValues(alpha: 0.07),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: couleur.withValues(alpha: 0.3)),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icone, size: 20, color: couleur),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(titre, style: AppTextStyle.dmSans(weight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(texte,
+                style: AppTextStyle.dmSans(size: 12, color: AppColors.sub)
+                    .copyWith(height: 1.5)),
+          ]),
         ),
       ]),
     );
@@ -352,6 +532,59 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
     try {
       await _repo.setChargeActive(charge.id, false);
+      await _load();
+    } on ApiException catch (e) {
+      if (mounted) showAppSnack(context, e.message);
+    }
+  }
+
+  /// Fixe ou retire l'objectif mensuel.
+  Future<void> _editTarget() async {
+    final controller = TextEditingController(
+      text: _pilot?.target == null ? '' : _pilot!.target!.toStringAsFixed(0),
+    );
+    final valeur = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('الهدف الشهري', style: AppTextStyle.playfair(size: 18)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+          style: AppTextStyle.dmSans(),
+          decoration: InputDecoration(
+            hintText: 'رقم المعاملات المرجو (DT)',
+            hintStyle: AppTextStyle.dmSans(size: 13, color: AppColors.sub),
+          ),
+        ),
+        actions: [
+          TextButton(
+            // Zéro retire l'objectif : plus simple qu'un bouton dédié.
+            onPressed: () => Navigator.pop(ctx, 0.0),
+            child: Text('نحّي الهدف',
+                style: AppTextStyle.dmSans(size: 13, color: AppColors.sub)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(
+              ctx,
+              double.tryParse(controller.text.replaceAll(',', '.')),
+            ),
+            child: Text('سجّل',
+                style: AppTextStyle.dmSans(
+                    color: AppColors.gold, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (valeur == null || !mounted) return;
+
+    try {
+      await context
+          .read<SalonAdminRepository>()
+          .updateSalon(widget.salonId, monthlyRevenueTarget: valeur);
       await _load();
     } on ApiException catch (e) {
       if (mounted) showAppSnack(context, e.message);

@@ -53,6 +53,8 @@ class SalonAdminRepository {
     int? cancellationWindowH,
     /// `false` bascule le salon en « fermé » (congés, §2.4).
     bool? open,
+    /// Objectif de chiffre d'affaires mensuel. 0 retire l'objectif.
+    double? monthlyRevenueTarget,
   }) async {
     final data = await _api.patch('/salons/$salonId', body: {
       if (name != null) 'name': name,
@@ -64,6 +66,8 @@ class SalonAdminRepository {
       if (cancellationWindowH != null)
         'cancellation_window_h': cancellationWindowH,
       if (open != null) 'status': open ? 'open' : 'closed',
+      if (monthlyRevenueTarget != null)
+        'monthly_revenue_target': monthlyRevenueTarget,
     }) as Map<String, dynamic>;
     return Salon.fromDetail(data);
   }

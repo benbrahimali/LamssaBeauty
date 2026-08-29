@@ -19,6 +19,7 @@ from app.services.cash_service import (
     day_summary,
     monthly_report,
     payroll,
+    pilot,
     profit_and_loss,
     staff_day_summary,
     staff_month_balance,
@@ -115,6 +116,30 @@ async def salon_pnl(
         debut, fin = local_month_bounds(now.year, now.month)
 
     return await profit_and_loss(salon.id, debut, fin)
+
+
+@router.get("/pilot", summary="Pilotage : seuil de rentabilité et objectif")
+async def salon_pilot(
+    salon_id: PydanticObjectId,
+    start: date | None = None,
+    end: date | None = None,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    """Le compte de résultat, plus les repères qui lui donnent un sens.
+
+    Un résultat seul ne dit pas s'il est bon. Le seuil de rentabilité dit à
+    partir de combien le salon gagne de l'argent, et la projection dit si le
+    rythme actuel suffira d'ici la fin de la période.
+    """
+    salon = await _my_salon(salon_id, user)
+    now = to_local(utcnow())
+    if start and end:
+        debut, _ = local_day_bounds(start)
+        _, fin = local_day_bounds(end)
+    else:
+        debut, fin = local_month_bounds(now.year, now.month)
+
+    return await pilot(salon, debut, fin)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

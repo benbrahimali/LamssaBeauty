@@ -39,6 +39,9 @@ class SalonUpdate(BaseModel):
     closed_until: datetime | None = None
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
+    # Objectif mensuel du gérant. 0 = il n'en fixe pas.
+    monthly_revenue_target: float | None = Field(default=None, ge=0)
+    expense_categories: list[str] | None = None
 
 
 class ServiceCreate(BaseModel):
