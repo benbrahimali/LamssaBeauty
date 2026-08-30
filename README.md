@@ -516,6 +516,30 @@ Ouvrez **http://localhost:8000/admin** depuis un navigateur. Une page autonome
 servie par l'API elle-même : pas de build, pas de dépendance, pas de second
 projet à faire tourner.
 
+### Si `/admin` répond « Not Found »
+
+Ouvrez **http://127.0.0.1:8000/admin**, pas `localhost`.
+
+Le `docker-compose.yml` de ce dépôt publie lui aussi le port 8000. Quand un
+conteneur `backend-api` tourne en même temps qu'un `uvicorn` local, deux
+serveurs occupent le port : sous Windows, `localhost` se résout d'abord en
+IPv6 (`::1`) et atteint le conteneur, tandis que `127.0.0.1` atteint le
+serveur local. Un conteneur construit la veille sert alors du code d'hier —
+une route ajoutée aujourd'hui y est introuvable, sans le moindre message
+expliquant pourquoi.
+
+Pour lever l'ambiguïté plutôt que de la contourner :
+
+```bash
+docker compose -f backend/docker-compose.yml stop api   # ou
+docker compose -f backend/docker-compose.yml up -d --build api
+```
+
+Le même piège vaut pour le téléphone : vérifiez quel serveur répond avec
+`curl http://<ip-du-pc>:8000/health`. Le serveur à jour renvoie
+`{"status":"ok","api":"ok","mongo":"ok","redis":"ok"}` ; une réponse réduite à
+`{"status":"ok"}` trahit une instance ancienne.
+
 ### Qui y accède
 
 Les numéros listés dans `ADMIN_PHONES` (séparés par des virgules), et eux
