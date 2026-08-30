@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../data/repositories/cash_repository.dart';
 import '../state/cash_controller.dart';
 import '../theme/app_theme.dart';
 import 'async_states.dart';
+import 'prompt_dialog.dart';
 
 /// L'état du tiroir, et le comptage du soir (§3.4).
 ///
@@ -51,45 +51,71 @@ class _TreasurySheetState extends State<TreasurySheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.88,
-      ),
-      decoration: const BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 40,
-          height: 4,
-          decoration: BoxDecoration(
-            color: AppColors.border,
-            borderRadius: BorderRadius.circular(2),
-          ),
+    final media = MediaQuery.of(context);
+    // Le clavier recouvre la feuille sans réduire l'écran : plafonner à 88 %
+    // de la hauteur totale la ferait déborder sous les touches. On plafonne à
+    // ce qui reste réellement visible, et on rend la marge basse au clavier.
+    final clavier = media.viewInsets.bottom;
+    final disponible = media.size.height - clavier;
+
+    // La marge du clavier va à l'extérieur du plafond de hauteur : à
+    // l'intérieur, elle mangerait la place réservée au contenu.
+    return Padding(
+      padding: EdgeInsets.only(bottom: clavier),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+        constraints: BoxConstraints(maxHeight: disponible * 0.88),
+        decoration: const BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
-        const SizedBox(height: 18),
-        Text('🧾 الصندوق', style: AppTextStyle.playfair(size: 20)),
-        const SizedBox(height: 4),
-        Text('شنوّة لازم يكون في الدرج توّا',
-            style: AppTextStyle.dmSans(size: 12, color: AppColors.sub)),
-        const SizedBox(height: 16),
-        Flexible(child: _buildBody()),
-      ]),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Text('🧾 الصندوق', style: AppTextStyle.playfair(size: 20)),
+          const SizedBox(height: 4),
+          Text('شنوّة لازم يكون في الدرج توّا',
+              style: AppTextStyle.dmSans(size: 12, color: AppColors.sub)),
+          const SizedBox(height: 16),
+          Flexible(child: _buildBody()),
+        ]),
+      ),
     );
   }
 
+  /// Le corps est toujours défilable, y compris pendant le chargement.
+  ///
+  /// Une hauteur figée pour l'indicateur déborde dès que la place manque —
+  /// petit écran, police système agrandie, clavier ouvert — et un débordement
+  /// pendant le chargement corrompt l'arbre avant même que les données
+  /// arrivent.
   Widget _buildBody() {
-    if (_loading) return const SizedBox(height: 200, child: AppLoader());
+    if (_loading) {
+      return const SingleChildScrollView(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 60),
+          child: AppLoader(),
+        ),
+      );
+    }
 
     final t = _treasury;
     if (t == null) {
-      return SizedBox(
-        height: 200,
-        child: AppError(
-            message: context.read<CashController>().error ?? 'Trésorerie indisponible',
-            onRetry: _load),
+      return SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 40),
+          child: AppError(
+              message: context.read<CashController>().error ??
+                  'Trésorerie indisponible',
+              onRetry: _load),
+        ),
       );
     }
 
@@ -132,9 +158,13 @@ class _TreasurySheetState extends State<TreasurySheet> {
         if (t.withdrawals > 0) _line('مسحوب', -t.withdrawals),
         const Divider(color: AppColors.border, height: 22),
         Row(children: [
-          Text('لازم يكون في الدرج',
-              style: AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
-          const Spacer(),
+          Expanded(
+            child: Text('لازم يكون في الدرج',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 10),
           Text('${t.expectedCash.toStringAsFixed(2)} DT',
               style: AppTextStyle.dmSans(
                   size: 18,
@@ -154,14 +184,15 @@ class _TreasurySheetState extends State<TreasurySheet> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: (manque ? AppColors.red : AppColors.gold).withValues(alpha: 0.12),
+        color:
+            (manque ? AppColors.red : AppColors.gold).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(children: [
         Text(manque ? '⚠️ ناقص' : '⚠️ زايد',
             style: AppTextStyle.dmSans(size: 12, weight: FontWeight.w700)),
         const SizedBox(width: 8),
-        Expanded(
+        Flexible(
           child: Text(
             t.varianceReason.isEmpty ? 'بلا سبب مكتوب' : t.varianceReason,
             maxLines: 1,
@@ -169,6 +200,7 @@ class _TreasurySheetState extends State<TreasurySheet> {
             style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
           ),
         ),
+        const SizedBox(width: 8),
         Text('${t.cashVariance.toStringAsFixed(2)} DT',
             style: AppTextStyle.dmSans(
                 size: 13,
@@ -188,17 +220,23 @@ class _TreasurySheetState extends State<TreasurySheet> {
       ),
       child: Column(children: [
         Row(children: [
-          Text('🏦 البنكة',
-              style: AppTextStyle.dmSans(size: 13, weight: FontWeight.w700)),
-          const Spacer(),
+          Expanded(
+            child: Text('🏦 البنكة',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyle.dmSans(size: 13, weight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 10),
           Text('${t.bankTotal.toStringAsFixed(2)} DT',
               style: AppTextStyle.dmSans(size: 15, weight: FontWeight.w700)),
         ]),
         const SizedBox(height: 8),
-        if (t.cardTotal > 0) _line('كارط', t.cardTotal, positif: true, petit: true),
+        if (t.cardTotal > 0)
+          _line('كارط', t.cardTotal, positif: true, petit: true),
         if (t.onlineTotal > 0)
           _line('أونلاين', t.onlineTotal, positif: true, petit: true),
-        if (t.bankExpenses > 0) _line('مصاريف بالتحويل', -t.bankExpenses, petit: true),
+        if (t.bankExpenses > 0)
+          _line('مصاريف بالتحويل', -t.bankExpenses, petit: true),
         const SizedBox(height: 6),
         Text('هالفلوس ما تدخلش للدرج',
             style: AppTextStyle.dmSans(size: 11, color: AppColors.sub)),
@@ -231,6 +269,7 @@ class _TreasurySheetState extends State<TreasurySheet> {
                     style: AppTextStyle.dmSans(size: 12),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   '${m.isIncoming ? '+' : '−'}${m.amount.toStringAsFixed(2)} DT',
                   style: AppTextStyle.dmSans(
@@ -240,9 +279,11 @@ class _TreasurySheetState extends State<TreasurySheet> {
                 if (!t.closed)
                   IconButton(
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: () => _removeMovement(m),
-                    icon: const Icon(Icons.close, size: 14, color: AppColors.sub),
+                    icon:
+                        const Icon(Icons.close, size: 14, color: AppColors.sub),
                   ),
               ]),
             )),
@@ -258,10 +299,18 @@ class _TreasurySheetState extends State<TreasurySheet> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(children: [
-        Text(label,
-            style: AppTextStyle.dmSans(
-                size: petit ? 11 : 12, color: AppColors.sub)),
-        const Spacer(),
+        // Le libellé cède la place, jamais le montant : un chiffre tronqué
+        // serait pire qu'un mot tronqué. Sans cette souplesse la ligne déborde
+        // dès qu'un montant atteint quatre chiffres ou que la police système
+        // est agrandie.
+        Expanded(
+          child: Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.dmSans(
+                  size: petit ? 11 : 12, color: AppColors.sub)),
+        ),
+        const SizedBox(width: 10),
         Text(
           '${sortie ? '−' : (positif ? '+' : '')}'
           '${montant.abs().toStringAsFixed(2)} DT',
@@ -305,7 +354,10 @@ class _TreasurySheetState extends State<TreasurySheet> {
         child: OutlinedButton.icon(
           onPressed: () => _addMovement('deposit'),
           icon: const Icon(Icons.add, size: 16),
-          label: Text('زيد فلوس', style: AppTextStyle.dmSans(size: 12)),
+          label: Text('زيد فلوس',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.dmSans(size: 12)),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.text,
             side: const BorderSide(color: AppColors.border),
@@ -318,7 +370,10 @@ class _TreasurySheetState extends State<TreasurySheet> {
         child: OutlinedButton.icon(
           onPressed: () => _addMovement('withdrawal'),
           icon: const Icon(Icons.remove, size: 16),
-          label: Text('اسحب', style: AppTextStyle.dmSans(size: 12)),
+          label: Text('اسحب',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.dmSans(size: 12)),
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.text,
             side: const BorderSide(color: AppColors.border),
@@ -330,69 +385,40 @@ class _TreasurySheetState extends State<TreasurySheet> {
   }
 
   Future<void> _addMovement(String type) async {
-    final montant = TextEditingController();
-    final motif = TextEditingController();
-    final valide = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: Text(type == 'withdrawal' ? 'اسحب من الصندوق' : 'زيد فلوس للصندوق',
-            style: AppTextStyle.playfair(size: 17)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(
-            controller: montant,
-            autofocus: true,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))
-            ],
-            style: AppTextStyle.dmSans(),
-            decoration: InputDecoration(
-              hintText: 'القيمة بالدينار',
-              hintStyle: AppTextStyle.dmSans(size: 13, color: AppColors.sub),
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextField(
-            controller: motif,
-            style: AppTextStyle.dmSans(),
-            decoration: InputDecoration(
-              hintText: type == 'withdrawal' ? 'وين مشات ؟' : 'منين جات ؟',
-              hintStyle: AppTextStyle.dmSans(size: 13, color: AppColors.sub),
-            ),
-          ),
-        ]),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('رجوع', style: AppTextStyle.dmSans(color: AppColors.sub)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('سجّل',
-                style: AppTextStyle.dmSans(
-                    color: AppColors.gold, weight: FontWeight.w700)),
-          ),
-        ],
-      ),
+    final retrait = type == 'withdrawal';
+    final saisie = await PromptDialog.show(
+      context,
+      title: retrait ? 'اسحب من الصندوق' : 'زيد فلوس للصندوق',
+      fields: [
+        const PromptField(
+          name: 'montant',
+          hint: 'القيمة بالدينار',
+          numeric: true,
+          autofocus: true,
+        ),
+        PromptField(
+          name: 'motif',
+          hint: retrait ? 'وين مشات ؟' : 'منين جات ؟',
+        ),
+      ],
     );
+    if (saisie == null || !mounted) return;
 
-    final valeur = double.tryParse(montant.text.trim());
-    final label = motif.text.trim();
-    montant.dispose();
-    motif.dispose();
-    if (valide != true || !mounted) return;
+    final valeur = saisie.number('montant');
     if (valeur == null || valeur <= 0) {
       showAppSnack(context, 'قيمة غالطة');
       return;
     }
 
-    final ok = await context
-        .read<CashController>()
-        .addMovement(type: type, amount: valeur, label: label);
+    final ok = await context.read<CashController>().addMovement(
+          type: type,
+          amount: valeur,
+          label: saisie['motif'],
+        );
     if (!mounted) return;
     if (!ok) {
-      showAppSnack(context, context.read<CashController>().error ?? 'ما تسجّلش');
+      showAppSnack(
+          context, context.read<CashController>().error ?? 'ما تسجّلش');
       return;
     }
     await _load();

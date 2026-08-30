@@ -7,6 +7,7 @@ import '../data/repositories/cash_repository.dart';
 import '../data/repositories/salon_admin_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
+import '../widgets/prompt_dialog.dart';
 
 /// Gestion financière du salon (§3.4).
 ///
@@ -255,8 +256,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('عتبة الربح', style: AppTextStyle.dmSans(weight: FontWeight.w700)),
-          const Spacer(),
+          Expanded(
+            child: Text('عتبة الربح',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyle.dmSans(weight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 10),
           Text('${seuil.toStringAsFixed(0)} DT',
               style: AppTextStyle.dmSans(
                   weight: FontWeight.w700, color: AppColors.gold)),
@@ -306,8 +312,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('🎯 الهدف', style: AppTextStyle.dmSans(weight: FontWeight.w700)),
-          const Spacer(),
+          Expanded(
+            child: Text('🎯 الهدف',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyle.dmSans(weight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 10),
           Text('${pilot.target!.toStringAsFixed(0)} DT',
               style: AppTextStyle.dmSans(weight: FontWeight.w700)),
           GestureDetector(
@@ -427,12 +438,20 @@ class _FinanceScreenState extends State<FinanceScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(children: [
-        Text(label,
-            style: AppTextStyle.dmSans(
-                size: fort ? 14 : 13,
-                color: fort ? AppColors.text : AppColors.sub,
-                weight: fort ? FontWeight.w700 : FontWeight.w400)),
-        const Spacer(),
+        // Le libellé cède la place, jamais le montant : sans élément
+        // flexible, un `Spacer` tombe à zéro et les deux textes
+        // débordent dès qu'un chiffre s'allonge ou que la police
+        // système est agrandie.
+        Expanded(
+          child: Text(label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.dmSans(
+                  size: fort ? 14 : 13,
+                  color: fort ? AppColors.text : AppColors.sub,
+                  weight: fort ? FontWeight.w700 : FontWeight.w400)),
+        ),
+        const SizedBox(width: 10),
         Text('${valeur.toStringAsFixed(2)} DT',
             style: AppTextStyle.dmSans(
                 size: fort ? 15 : 13,
@@ -449,8 +468,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(children: [
         Row(children: [
-          Text(categorie, style: AppTextStyle.dmSans(size: 13)),
-          const Spacer(),
+          Expanded(
+            child: Text(categorie,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyle.dmSans(size: 13)),
+          ),
+          const SizedBox(width: 10),
           Text('${montant.toStringAsFixed(0)} DT',
               style: AppTextStyle.dmSans(size: 13, weight: FontWeight.w600)),
         ]),
@@ -551,43 +575,21 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 
   Future<void> _editTipPolicy() async {
-    final controller =
-        TextEditingController(text: _tipStaffPct.toStringAsFixed(0));
-    final valeur = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: Text('حصّة الحجّام من البقشيش',
-            style: AppTextStyle.playfair(size: 17)),
-        content: TextField(
-          controller: controller,
+    final saisie = await PromptDialog.show(
+      context,
+      title: 'حصّة الحجّام من البقشيش',
+      fields: [
+        PromptField(
+          name: 'pct',
+          hint: '100 = الكل للحجّام',
+          initial: _tipStaffPct.toStringAsFixed(0),
+          numeric: true,
           autofocus: true,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          style: AppTextStyle.dmSans(),
-          decoration: InputDecoration(
-            hintText: '100 = الكل للحجّام',
-            hintStyle: AppTextStyle.dmSans(size: 13, color: AppColors.sub),
-          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('رجوع', style: AppTextStyle.dmSans(color: AppColors.sub)),
-          ),
-          TextButton(
-            onPressed: () {
-              final n = double.tryParse(controller.text.trim());
-              Navigator.pop(ctx, n != null && n >= 0 && n <= 100 ? n : null);
-            },
-            child: Text('سجّل',
-                style: AppTextStyle.dmSans(
-                    color: AppColors.gold, weight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      ],
     );
-    controller.dispose();
+    final pct = saisie?.number('pct');
+    final valeur = pct != null && pct >= 0 && pct <= 100 ? pct : null;
     if (valeur == null || !mounted) return;
 
     try {
@@ -650,45 +652,24 @@ class _FinanceScreenState extends State<FinanceScreen> {
 
   /// Fixe ou retire l'objectif mensuel.
   Future<void> _editTarget() async {
-    final controller = TextEditingController(
-      text: _pilot?.target == null ? '' : _pilot!.target!.toStringAsFixed(0),
-    );
-    final valeur = await showDialog<double>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.card,
-        title: Text('الهدف الشهري', style: AppTextStyle.playfair(size: 18)),
-        content: TextField(
-          controller: controller,
+    final saisie = await PromptDialog.show(
+      context,
+      title: 'الهدف الشهري',
+      fields: [
+        PromptField(
+          name: 'objectif',
+          hint: 'رقم المعاملات المرجو (DT)',
+          initial: _pilot?.target == null ? '' : _pilot!.target!.toStringAsFixed(0),
+          numeric: true,
           autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-          style: AppTextStyle.dmSans(),
-          decoration: InputDecoration(
-            hintText: 'رقم المعاملات المرجو (DT)',
-            hintStyle: AppTextStyle.dmSans(size: 13, color: AppColors.sub),
-          ),
         ),
-        actions: [
-          TextButton(
-            // Zéro retire l'objectif : plus simple qu'un bouton dédié.
-            onPressed: () => Navigator.pop(ctx, 0.0),
-            child: Text('نحّي الهدف',
-                style: AppTextStyle.dmSans(size: 13, color: AppColors.sub)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(
-              ctx,
-              double.tryParse(controller.text.replaceAll(',', '.')),
-            ),
-            child: Text('سجّل',
-                style: AppTextStyle.dmSans(
-                    color: AppColors.gold, weight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      ],
+      // Zéro retire l'objectif : plus simple qu'un bouton dédié.
+      neutralLabel: 'نحّي الهدف',
     );
-    controller.dispose();
+    final valeur = saisie == null
+        ? null
+        : (saisie.neutral ? 0.0 : saisie.number('objectif'));
     if (valeur == null || !mounted) return;
 
     try {

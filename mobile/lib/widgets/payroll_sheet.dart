@@ -161,12 +161,19 @@ class _PayrollSheetState extends State<PayrollSheet> {
 
   Widget _total(String label, double valeur, Color couleur, {bool fort = false}) {
     return Row(children: [
-      Text(label,
-          style: AppTextStyle.dmSans(
-              size: fort ? 14 : 12,
-              color: fort ? AppColors.text : AppColors.sub,
-              weight: fort ? FontWeight.w700 : FontWeight.w400)),
-      const Spacer(),
+      // Le libellé cède la place, jamais le montant : sans élément flexible,
+      // un `Spacer` tombe à zéro et les deux textes débordent dès que la
+      // police système est agrandie.
+      Expanded(
+        child: Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyle.dmSans(
+                size: fort ? 14 : 12,
+                color: fort ? AppColors.text : AppColors.sub,
+                weight: fort ? FontWeight.w700 : FontWeight.w400)),
+      ),
+      const SizedBox(width: 10),
       Text('${valeur.toStringAsFixed(2)} DT',
           style: AppTextStyle.dmSans(
               size: fort ? 16 : 13, color: couleur, weight: FontWeight.w700)),

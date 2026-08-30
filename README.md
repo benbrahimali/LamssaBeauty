@@ -107,8 +107,12 @@ repères qui lui donnent un sens.
 Le **seuil de rentabilité** dépend de ce que le salon reverse à son équipe :
 
 ```
-seuil = charges fixes / (1 − part reversée)
+seuil = (charges fixes + dépenses du mois) / (1 − part reversée)
 ```
+
+Les dépenses ponctuelles comptent autant que le loyer : un séchoir acheté ce
+mois-ci doit être couvert lui aussi. Ne retenir que les charges récurrentes
+annoncerait un seuil déjà franchi alors qu'il ne l'est pas.
 
 À 50 % de commission, chaque dinar encaissé n'en laisse que 50 centimes pour
 couvrir le loyer : il faut donc encaisser **le double** des charges. Un salon

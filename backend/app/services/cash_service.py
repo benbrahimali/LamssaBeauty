@@ -557,7 +557,10 @@ async def pilot(
     """
     compte = await profit_and_loss(salon.id, start, end)
 
-    charges_fixes = compte["expenses"] + compte["recurring_charges"]
+    # Charges fixes ET dépenses ponctuelles : un séchoir acheté ce mois-ci est
+    # un coût à couvrir au même titre que le loyer. Ne compter que les charges
+    # récurrentes annoncerait un seuil déjà atteint alors qu'il ne l'est pas.
+    charges_periode = compte["expenses"] + compte["recurring_charges"]
     revenus = compte["revenue"]
 
     # Part reversée à l'équipe, mesurée sur la période. Sans activité, on
@@ -570,8 +573,8 @@ async def pilot(
     # Marge nulle ou négative : aucun volume ne couvrirait les charges. Le dire
     # vaut mieux qu'afficher un seuil astronomique ou une division par zéro.
     seuil = (
-        round(charges_fixes / marge_unitaire, 2)
-        if marge_unitaire > 0.01 and charges_fixes > 0
+        round(charges_periode / marge_unitaire, 2)
+        if marge_unitaire > 0.01 and charges_periode > 0
         else None
     )
 
