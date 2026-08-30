@@ -18,6 +18,11 @@ class CashController extends ChangeNotifier {
   DayCash _day = const DayCash();
   List<Advance> _advances = const [];
   SalonAgenda _agenda = const SalonAgenda();
+
+  /// Jour consulté dans l'agenda du salon. Le gérant était enfermé sur
+  /// aujourd'hui : un RDV pris pour demain lui arrivait en notification puis
+  /// devenait introuvable.
+  DateTime _agendaDay = DateTime.now();
   List<ClosureResult> _closures = const [];
 
   /// Catalogue et équipe du salon — nécessaires pour saisir un walk-in.
@@ -34,6 +39,46 @@ class CashController extends ChangeNotifier {
   List<Advance> get pendingAdvances =>
       _advances.where((a) => a.isPending).toList();
   SalonAgenda get agenda => _agenda;
+  DateTime get agendaDay => _agendaDay;
+
+  /// La caisse et l'encaissement ne valent que pour aujourd'hui : l'écran doit
+  /// pouvoir le dire au lieu de laisser croire qu'on clôture un autre jour.
+  bool get isAgendaToday => _sameDay(_agendaDay, DateTime.now());
+
+  static bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  static String _isoOf(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> shiftAgenda(int delta) async {
+    _agendaDay = _agendaDay.add(Duration(days: delta));
+    await loadAgenda();
+  }
+
+  Future<void> resetAgendaToToday() async {
+    if (isAgendaToday) return;
+    _agendaDay = DateTime.now();
+    await loadAgenda();
+  }
+
+  /// Recharge le seul agenda : la caisse du jour et les tséb9as ne dépendent
+  /// pas du jour consulté, les rejouer serait du gaspillage.
+  Future<void> loadAgenda() async {
+    final salonId = _salonId;
+    if (salonId == null) return;
+    try {
+      _agenda = await _bookings.agenda(
+        salonId: salonId,
+        isoDate: isAgendaToday ? null : _isoOf(_agendaDay),
+      );
+    } on ApiException catch (e) {
+      _error = e.message;
+      _agenda = const SalonAgenda();
+    }
+    notifyListeners();
+  }
   List<ClosureResult> get closures => _closures;
   List<CashWorker> get workers => _day.workers;
   bool get loading => _loading;
@@ -64,7 +109,9 @@ class CashController extends ChangeNotifier {
       final results = await Future.wait([
         _cash.today(salonId),
         _cash.salonAdvances(salonId),
-        _bookings.agenda(salonId: salonId),
+        _bookings.agenda(
+            salonId: salonId,
+            isoDate: isAgendaToday ? null : _isoOf(_agendaDay)),
         _cash.closures(salonId),
       ]);
       _day = results[0] as DayCash;
@@ -250,6 +297,11 @@ class MyCashController extends ChangeNotifier {
   MyCash _cashDay = const MyCash();
   List<Advance> _advances = const [];
   List<Booking> _agenda = const [];
+
+  /// Jour consulté dans l'agenda. Le coiffeur était enfermé sur aujourd'hui :
+  /// un RDV pris pour demain lui arrivait en notification puis devenait
+  /// introuvable dans l'app.
+  DateTime _agendaDay = DateTime.now();
   List<ServiceItem> _services = const [];
   bool _loading = false;
   String? _error;
@@ -257,6 +309,44 @@ class MyCashController extends ChangeNotifier {
   MyCash get cash => _cashDay;
   List<Advance> get advances => _advances;
   List<Booking> get agenda => _agenda;
+  DateTime get agendaDay => _agendaDay;
+
+  /// Vrai quand l'agenda affiché est celui du jour — la caisse et les actions
+  /// d'encaissement ne valent que pour aujourd'hui.
+  bool get isToday => _sameDay(_agendaDay, DateTime.now());
+
+  static bool _sameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  static String _iso(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  /// Déplace l'agenda de [delta] jours. Le passé reste consultable : un
+  /// coiffeur a besoin de retrouver ce qu'il a fait hier.
+  Future<void> shiftAgenda(int delta) async {
+    _agendaDay = _agendaDay.add(Duration(days: delta));
+    await loadAgenda();
+  }
+
+  Future<void> resetAgendaToToday() async {
+    if (isToday) return;
+    _agendaDay = DateTime.now();
+    await loadAgenda();
+  }
+
+  /// Recharge le seul agenda : changer de jour ne doit pas rejouer la caisse
+  /// ni les tséb9as, qui ne dépendent pas du jour consulté.
+  Future<void> loadAgenda() async {
+    try {
+      _agenda = await _bookings.myAgenda(
+          isoDate: isToday ? null : _iso(_agendaDay));
+    } on ApiException catch (e) {
+      _error = e.message;
+      _agenda = const [];
+    }
+    notifyListeners();
+  }
   List<ServiceItem> get services => _services;
 
   /// Catalogue du salon — chargé à la demande, uniquement pour le walk-in.
@@ -302,7 +392,8 @@ class MyCashController extends ChangeNotifier {
     try {
       _cashDay = await _cash.mine();
       _advances = await _cash.myAdvances();
-      _agenda = await _bookings.myAgenda();
+      _agenda = await _bookings.myAgenda(
+          isoDate: isToday ? null : _iso(_agendaDay));
     } on ApiException catch (e) {
       _error = e.message;
     } finally {

@@ -202,8 +202,18 @@ async def seed() -> None:
         # Le seed peut tourner à n'importe quelle heure. Avant l'ouverture, les
         # créneaux « métier » (9 h et plus) sont tous à venir : sans repli, la
         # caisse du jour serait vide et la démo montrerait un salon sans recette.
-        day_start = combine_local(today, "00:00")
-        elapsed = (now - day_start).total_seconds()
+        #
+        # Le repli reste dans les heures d'ouverture. Étalé depuis minuit, il
+        # produisait des coupes à 00 h 10 — un salon fermé — et cette
+        # invraisemblance passait pour un bug d'affichage.
+        ouverture = combine_local(today, "09:00")
+        fermeture = combine_local(today, "19:00")
+        fin_plage = min(now, fermeture)
+        if fin_plage <= ouverture:
+            # Seed lancé avant l'ouverture : on remplit toute la journée type
+            # plutôt que d'inventer des créneaux nocturnes.
+            fin_plage = fermeture
+        amplitude = (fin_plage - ouverture).total_seconds()
         total_slots = len(members) * 3
         placed = 0
 
@@ -212,10 +222,8 @@ async def seed() -> None:
                 service = random.choice(services)
                 start = combine_local(today, f"{9 + hour_offset * 2 + slot:02d}:00")
                 if start >= now:
-                    # Repli : on répartit sur le temps déjà écoulé depuis minuit,
-                    # en heure locale, pour que la transaction reste « du jour ».
-                    start = day_start + timedelta(
-                        seconds=elapsed * (placed + 1) / (total_slots + 1)
+                    start = ouverture + timedelta(
+                        seconds=amplitude * (placed + 1) / (total_slots + 1)
                     )
                 placed += 1
                 client = random.choice(client_users)

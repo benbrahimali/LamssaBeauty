@@ -70,6 +70,27 @@ pré-remplit le code OTP renvoyé par l'API et le code `000000` fonctionne toujo
 | 2.4 / 8.5 | Style DNA — analyse du selfie par modèle vision | ✅ | `services/style_dna_service.py`, `api/v1/style_dna.py` |
 | 2.4 | Liste d'attente, programme fidélité | ❌ V2 | — |
 
+### Agenda : voir au-delà d'aujourd'hui (§3.3)
+
+Coiffeur et gérant étaient enfermés sur la journée en cours. Un RDV pris pour
+demain leur arrivait en notification, puis restait **introuvable dans l'app**
+jusqu'au jour même — alors que le client, lui, avait déjà sa confirmation.
+Impossible de préparer sa journée.
+
+Les deux agendas se déplacent maintenant d'un jour à l'autre, dans les deux
+sens : le passé compte autant, on a souvent besoin de retrouver ce qu'on a
+fait hier. Toucher la date revient directement à aujourd'hui plutôt que de
+tapoter la flèche autant de fois qu'on s'est éloigné.
+
+Sur la journée courante, aucune date n'est envoyée au serveur : c'est lui qui
+décide de ce qu'est « aujourd'hui », en heure de Tunis. Laisser le téléphone
+trancher exposerait l'agenda à un fuseau mal réglé.
+
+**« مواعيدي » reste la vue client** — les RDV que *vous* avez pris, jamais
+ceux que vous recevez. Elle est donc vide pour un gérant ou un coiffeur qui
+n'a rien réservé pour lui-même, et c'est le comportement attendu : leur
+planning professionnel vit dans l'agenda, pas là.
+
 ### Calendrier : le jour de repos du coiffeur (§3.3, §3.5)
 
 Le salon ouvre six jours sur sept ; le coiffeur, lui, se repose le lundi. Les

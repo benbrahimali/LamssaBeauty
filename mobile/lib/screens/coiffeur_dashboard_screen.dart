@@ -35,6 +35,45 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
     });
   }
 
+  /// Titre de l'agenda, avec la navigation entre les jours.
+  ///
+  /// Le coiffeur était enfermé sur aujourd'hui : un RDV pris pour demain lui
+  /// arrivait en notification, puis restait introuvable dans l'app jusqu'au
+  /// jour même. Le passé reste consultable — on a souvent besoin de retrouver
+  /// ce qu'on a fait hier.
+  Widget _buildAgendaHeader(MyCashController controller) {
+    final jour = controller.agendaDay;
+    final titre = controller.isToday
+        ? '📅 جدول اليوم'
+        : '📅 ${jour.day}/${jour.month}';
+
+    return Row(children: [
+      IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        onPressed: () => controller.shiftAgenda(-1),
+        icon: const Icon(Icons.chevron_left, color: AppColors.sub, size: 22),
+      ),
+      Flexible(
+        child: GestureDetector(
+          // Un retour direct à aujourd'hui évite de tapoter la flèche autant
+          // de fois qu'on s'est éloigné.
+          onTap: controller.resetAgendaToToday,
+          child: Text(titre,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyle.playfair(size: 17)),
+        ),
+      ),
+      IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        onPressed: () => controller.shiftAgenda(1),
+        icon: const Icon(Icons.chevron_right, color: AppColors.sub, size: 22),
+      ),
+    ]);
+  }
+
   Future<void> _addWalkIn() async {
     final auth = context.read<AuthController>();
     final controller = context.read<MyCashController>();
@@ -158,7 +197,7 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const SectionHeader(title: '📅 جدول اليوم'),
+                      Expanded(child: _buildAgendaHeader(controller)),
                       GestureDetector(
                         onTap: _addWalkIn,
                         child: Container(

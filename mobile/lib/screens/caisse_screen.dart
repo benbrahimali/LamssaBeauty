@@ -146,11 +146,15 @@ class _CaisseScreenState extends State<CaisseScreen> {
   Widget _buildHeader(CashController cash) {
     final now = DateTime.now();
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, MediaQuery.of(context).padding.top + 20, 24, 20),
+      padding: EdgeInsets.fromLTRB(
+          24, MediaQuery.of(context).padding.top + 20, 24, 20),
       child: Row(children: [
-        Text('الكاسة 💰', style: GoogleFonts.playfairDisplay(
-          fontSize: 26, fontWeight: FontWeight.w700, color: AppColors.text,
-        )),
+        Text('الكاسة 💰',
+            style: GoogleFonts.playfairDisplay(
+              fontSize: 26,
+              fontWeight: FontWeight.w700,
+              color: AppColors.text,
+            )),
         const Spacer(),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -192,38 +196,53 @@ class _CaisseScreenState extends State<CaisseScreen> {
           ],
         ),
         child: Column(children: [
-          Text('إجمالي اليوم', style: GoogleFonts.dmSans(
-            fontSize: 13, color: AppColors.sub, letterSpacing: 1,
-          )),
+          Text('إجمالي اليوم',
+              style: GoogleFonts.dmSans(
+                fontSize: 13,
+                color: AppColors.sub,
+                letterSpacing: 1,
+              )),
           const SizedBox(height: 10),
           Text('${day.total.toStringAsFixed(0)} DT',
               style: GoogleFonts.playfairDisplay(
-                fontSize: 44, fontWeight: FontWeight.w700, color: AppColors.gold,
+                fontSize: 44,
+                fontWeight: FontWeight.w700,
+                color: AppColors.gold,
                 shadows: [
-                  Shadow(color: AppColors.gold.withValues(alpha: 0.4), blurRadius: 20)
+                  Shadow(
+                      color: AppColors.gold.withValues(alpha: 0.4),
+                      blurRadius: 20)
                 ],
               )),
           const SizedBox(height: 16),
           Row(children: [
-            Expanded(child: _statBox('🏪 الصالون',
-                '${day.salonTotal.toStringAsFixed(0)} DT', AppColors.teal)),
+            Expanded(
+                child: _statBox('🏪 الصالون',
+                    '${day.salonTotal.toStringAsFixed(0)} DT', AppColors.teal)),
             const SizedBox(width: 12),
-            Expanded(child: _statBox('👥 الفريق',
-                '${day.staffTotal.toStringAsFixed(0)} DT', AppColors.pink)),
+            Expanded(
+                child: _statBox('👥 الفريق',
+                    '${day.staffTotal.toStringAsFixed(0)} DT', AppColors.pink)),
             const SizedBox(width: 12),
-            Expanded(child: _statBox('💅 البواقي',
-                '+${day.tipsTotal.toStringAsFixed(0)} DT', AppColors.green)),
+            Expanded(
+                child: _statBox(
+                    '💅 البواقي',
+                    '+${day.tipsTotal.toStringAsFixed(0)} DT',
+                    AppColors.green)),
           ]),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: _statBox('💵 كاش',
-                '${day.cash.toStringAsFixed(0)} DT', AppColors.gold)),
+            Expanded(
+                child: _statBox('💵 كاش', '${day.cash.toStringAsFixed(0)} DT',
+                    AppColors.gold)),
             const SizedBox(width: 12),
-            Expanded(child: _statBox('💳 TPE',
-                '${day.card.toStringAsFixed(0)} DT', AppColors.gold)),
+            Expanded(
+                child: _statBox('💳 TPE', '${day.card.toStringAsFixed(0)} DT',
+                    AppColors.gold)),
             const SizedBox(width: 12),
-            Expanded(child: _statBox('🌐 أونلاين',
-                '${day.online.toStringAsFixed(0)} DT', AppColors.gold)),
+            Expanded(
+                child: _statBox('🌐 أونلاين',
+                    '${day.online.toStringAsFixed(0)} DT', AppColors.gold)),
           ]),
         ]),
       ),
@@ -245,9 +264,12 @@ class _CaisseScreenState extends State<CaisseScreen> {
             style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.sub)),
         const SizedBox(height: 4),
         FittedBox(
-          child: Text(value, style: GoogleFonts.dmSans(
-            fontSize: 14, fontWeight: FontWeight.w700, color: color,
-          )),
+          child: Text(value,
+              style: GoogleFonts.dmSans(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: color,
+              )),
         ),
       ]),
     );
@@ -256,7 +278,8 @@ class _CaisseScreenState extends State<CaisseScreen> {
   Future<void> _addWalkIn() async {
     final cash = context.read<CashController>();
     if (cash.services.isEmpty || cash.team.isEmpty) {
-      showAppSnack(context, 'Ajoute d’abord un service et un coiffeur au salon');
+      showAppSnack(
+          context, 'Ajoute d’abord un service et un coiffeur au salon');
       return;
     }
 
@@ -294,11 +317,12 @@ class _CaisseScreenState extends State<CaisseScreen> {
             border: Border.all(color: AppColors.teal.withValues(alpha: 0.35)),
           ),
           alignment: Alignment.center,
-          child: Text('➕ زبون طيّاح (walk-in)', style: AppTextStyle.dmSans(
-            size: 14,
-            weight: FontWeight.w700,
-            color: cash.day.closed ? AppColors.sub : AppColors.teal,
-          )),
+          child: Text('➕ زبون طيّاح (walk-in)',
+              style: AppTextStyle.dmSans(
+                size: 14,
+                weight: FontWeight.w700,
+                color: cash.day.closed ? AppColors.sub : AppColors.teal,
+              )),
         ),
       ),
     );
@@ -367,9 +391,12 @@ class _CaisseScreenState extends State<CaisseScreen> {
             border: Border.all(color: AppColors.teal.withValues(alpha: 0.35)),
           ),
           alignment: Alignment.center,
-          child: Text('📊 الميزانية', style: AppTextStyle.dmSans(
-            size: 14, weight: FontWeight.w700, color: AppColors.teal,
-          )),
+          child: Text('📊 الميزانية',
+              style: AppTextStyle.dmSans(
+                size: 14,
+                weight: FontWeight.w700,
+                color: AppColors.teal,
+              )),
         ),
       ),
     );
@@ -390,9 +417,12 @@ class _CaisseScreenState extends State<CaisseScreen> {
             border: Border.all(color: AppColors.gold.withValues(alpha: 0.35)),
           ),
           alignment: Alignment.center,
-          child: Text('💰 خلاص الأسبوع', style: AppTextStyle.dmSans(
-            size: 14, weight: FontWeight.w700, color: AppColors.gold,
-          )),
+          child: Text('💰 خلاص الأسبوع',
+              style: AppTextStyle.dmSans(
+                size: 14,
+                weight: FontWeight.w700,
+                color: AppColors.gold,
+              )),
         ),
       ),
     );
@@ -411,9 +441,11 @@ class _CaisseScreenState extends State<CaisseScreen> {
             border: Border.all(color: AppColors.border),
           ),
           alignment: Alignment.center,
-          child: Text('🧾 الصندوق', style: AppTextStyle.dmSans(
-            size: 14, weight: FontWeight.w700,
-          )),
+          child: Text('🧾 الصندوق',
+              style: AppTextStyle.dmSans(
+                size: 14,
+                weight: FontWeight.w700,
+              )),
         ),
       ),
     );
@@ -434,9 +466,12 @@ class _CaisseScreenState extends State<CaisseScreen> {
             border: Border.all(color: AppColors.red.withValues(alpha: 0.3)),
           ),
           alignment: Alignment.center,
-          child: Text('💸 المصاريف', style: AppTextStyle.dmSans(
-            size: 14, weight: FontWeight.w700, color: AppColors.red,
-          )),
+          child: Text('💸 المصاريف',
+              style: AppTextStyle.dmSans(
+                size: 14,
+                weight: FontWeight.w700,
+                color: AppColors.red,
+              )),
         ),
       ),
     );
@@ -470,7 +505,8 @@ class _CaisseScreenState extends State<CaisseScreen> {
         child: Row(
           children: List.generate(tabs.length, (i) {
             final active = _tab == i;
-            return Expanded(child: GestureDetector(
+            return Expanded(
+                child: GestureDetector(
               onTap: () => setState(() => _tab = i),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -480,11 +516,12 @@ class _CaisseScreenState extends State<CaisseScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
-                child: Text(tabs[i], style: GoogleFonts.dmSans(
-                  fontSize: 13,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w400,
-                  color: active ? Colors.black : AppColors.sub,
-                )),
+                child: Text(tabs[i],
+                    style: GoogleFonts.dmSans(
+                      fontSize: 13,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w400,
+                      color: active ? Colors.black : AppColors.sub,
+                    )),
               ),
             ));
           }),
@@ -504,101 +541,160 @@ class _CaisseScreenState extends State<CaisseScreen> {
       );
     }
     switch (_tab) {
-      case 0: return _buildToday(cash);
-      case 1: return _buildWorkers(cash);
-      case 2: return _buildHistory(cash);
-      default: return const SizedBox();
+      case 0:
+        return _buildToday(cash);
+      case 1:
+        return _buildWorkers(cash);
+      case 2:
+        return _buildHistory(cash);
+      default:
+        return const SizedBox();
     }
+  }
+
+  /// Navigation entre les jours de l'agenda.
+  ///
+  /// Sans elle, un RDV pris pour demain arrivait en notification puis restait
+  /// introuvable jusqu'au jour même — le gérant n'avait aucun moyen de
+  /// préparer sa journée.
+  Widget _buildAgendaNav(CashController cash) {
+    final jour = cash.agendaDay;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        IconButton(
+          onPressed: () => cash.shiftAgenda(-1),
+          icon: const Icon(Icons.chevron_left, color: AppColors.sub),
+        ),
+        GestureDetector(
+          onTap: cash.resetAgendaToToday,
+          child: Text(
+            cash.isAgendaToday ? 'اليوم' : '${jour.day}/${jour.month}',
+            style: AppTextStyle.dmSans(
+                size: 13,
+                weight: FontWeight.w700,
+                color: cash.isAgendaToday ? AppColors.sub : AppColors.gold),
+          ),
+        ),
+        IconButton(
+          onPressed: () => cash.shiftAgenda(1),
+          icon: const Icon(Icons.chevron_right, color: AppColors.sub),
+        ),
+      ]),
+    );
   }
 
   Widget _buildToday(CashController cash) {
     final bookings = cash.agenda.bookings;
     if (bookings.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 20),
-        child: AppEmpty(emoji: '📋', title: 'ما كاين خدمات اليوم'),
-      );
+      return Column(children: [
+        _buildAgendaNav(cash),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: AppEmpty(
+            emoji: '📋',
+            title: cash.isAgendaToday
+                ? 'ما كاين خدمات اليوم'
+                : 'ما كاين حتى موعد هالنهار',
+          ),
+        ),
+      ]);
     }
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Column(
-        children: bookings.map((booking) {
-          final statusColor = switch (booking.status) {
-            BookingStatus.confirmed => AppColors.green,
-            BookingStatus.inProgress => AppColors.teal,
-            BookingStatus.pending => AppColors.gold,
-            BookingStatus.done => AppColors.sub,
-            _ => AppColors.red,
-          };
-          final canComplete = booking.status == BookingStatus.confirmed ||
-              booking.status == BookingStatus.inProgress;
+    return Column(children: [
+      _buildAgendaNav(cash),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          children: bookings.map((booking) {
+            final statusColor = switch (booking.status) {
+              BookingStatus.confirmed => AppColors.green,
+              BookingStatus.inProgress => AppColors.teal,
+              BookingStatus.pending => AppColors.gold,
+              BookingStatus.done => AppColors.sub,
+              _ => AppColors.red,
+            };
+            final canComplete = booking.status == BookingStatus.confirmed ||
+                booking.status == BookingStatus.inProgress;
 
-          return Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(children: [
-              Container(
-                width: 8, height: 8,
-                decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(booking.clientName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                        color: AppColors.text,
-                      )),
-                  Text('${booking.service} · ${booking.time}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.sub)),
-                ]),
-              ),
-              const SizedBox(width: 8),
-              if (canComplete)
-                GestureDetector(
-                  onTap: () => _complete(booking),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: AppColors.gold,
-                      borderRadius: BorderRadius.circular(50),
-                    ),
-                    child: Text('خلّص', style: GoogleFonts.dmSans(
-                      fontSize: 12, fontWeight: FontWeight.w700, color: Colors.black,
-                    )),
-                  ),
-                )
-              else
-                Text('${booking.price.toStringAsFixed(0)} DT',
-                    style: GoogleFonts.dmSans(
-                      fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.gold,
-                    )),
-              // Seul un paiement en ligne encaissé se rembourse : proposer le
-              // geste sur un règlement en espèces mènerait à un 409.
-              if (booking.refundable)
-                GestureDetector(
-                  onTap: () => _refund(booking),
-                  behavior: HitTestBehavior.opaque,
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 10),
-                    child: Icon(Icons.undo_rounded, size: 18, color: AppColors.sub),
-                  ),
+              child: Row(children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration:
+                      BoxDecoration(color: statusColor, shape: BoxShape.circle),
                 ),
-            ]),
-          );
-        }).toList(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(booking.clientName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: AppColors.text,
+                            )),
+                        Text('${booking.service} · ${booking.time}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.dmSans(
+                                fontSize: 11, color: AppColors.sub)),
+                      ]),
+                ),
+                const SizedBox(width: 8),
+                if (canComplete)
+                  GestureDetector(
+                    onTap: () => _complete(booking),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: AppColors.gold,
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      child: Text('خلّص',
+                          style: GoogleFonts.dmSans(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black,
+                          )),
+                    ),
+                  )
+                else
+                  Text('${booking.price.toStringAsFixed(0)} DT',
+                      style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.gold,
+                      )),
+                // Seul un paiement en ligne encaissé se rembourse : proposer le
+                // geste sur un règlement en espèces mènerait à un 409.
+                if (booking.refundable)
+                  GestureDetector(
+                    onTap: () => _refund(booking),
+                    behavior: HitTestBehavior.opaque,
+                    child: const Padding(
+                      padding: EdgeInsets.only(left: 10),
+                      child: Icon(Icons.undo_rounded,
+                          size: 18, color: AppColors.sub),
+                    ),
+                  ),
+              ]),
+            );
+          }).toList(),
+        ),
       ),
-    );
+    ]);
   }
 
   Widget _buildWorkers(CashController cash) {
@@ -608,76 +704,99 @@ class _CaisseScreenState extends State<CaisseScreen> {
         child: AppEmpty(
           emoji: '👥',
           title: 'Aucun encaissement',
-          subtitle: 'Le détail par employé apparaît après la première prestation.',
+          subtitle:
+              'Le détail par employé apparaît après la première prestation.',
         ),
       );
     }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
-        children: cash.workers.map((worker) => Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(children: [
-            Row(children: [
-              InitialsAvatar(
-                  initials: worker.initials, color: worker.color, size: 48),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(worker.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.dmSans(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        color: AppColors.text,
-                      )),
-                  Text('${worker.cuts} خدمات اليوم',
-                      style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.sub)),
-                ]),
-              ),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('${worker.total.toStringAsFixed(0)} DT',
-                    style: GoogleFonts.playfairDisplay(
-                      fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.gold,
-                    )),
-                Text('الإجمالي',
-                    style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.sub)),
-              ]),
-            ]),
-            const SizedBox(height: 14),
-            const Divider(color: AppColors.border, height: 1),
-            const SizedBox(height: 12),
-            Row(children: [
-              _workerStat('نصيبه', '${worker.share.toStringAsFixed(1)} DT',
-                  AppColors.green),
-              _workerStat('بواقي', '+${worker.tip.toStringAsFixed(1)} DT',
-                  AppColors.gold),
-              _workerStat('الصافي',
-                  '${(worker.share + worker.tip).toStringAsFixed(1)} DT',
-                  AppColors.text),
-            ]),
-          ]),
-        )).toList(),
+        children: cash.workers
+            .map((worker) => Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Column(children: [
+                    Row(children: [
+                      InitialsAvatar(
+                          initials: worker.initials,
+                          color: worker.color,
+                          size: 48),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(worker.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.dmSans(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                    color: AppColors.text,
+                                  )),
+                              Text('${worker.cuts} خدمات اليوم',
+                                  style: GoogleFonts.dmSans(
+                                      fontSize: 12, color: AppColors.sub)),
+                            ]),
+                      ),
+                      Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('${worker.total.toStringAsFixed(0)} DT',
+                                style: GoogleFonts.playfairDisplay(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.gold,
+                                )),
+                            Text('الإجمالي',
+                                style: GoogleFonts.dmSans(
+                                    fontSize: 10, color: AppColors.sub)),
+                          ]),
+                    ]),
+                    const SizedBox(height: 14),
+                    const Divider(color: AppColors.border, height: 1),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      _workerStat(
+                          'نصيبه',
+                          '${worker.share.toStringAsFixed(1)} DT',
+                          AppColors.green),
+                      _workerStat(
+                          'بواقي',
+                          '+${worker.tip.toStringAsFixed(1)} DT',
+                          AppColors.gold),
+                      _workerStat(
+                          'الصافي',
+                          '${(worker.share + worker.tip).toStringAsFixed(1)} DT',
+                          AppColors.text),
+                    ]),
+                  ]),
+                ))
+            .toList(),
       ),
     );
   }
 
   Widget _workerStat(String label, String value, Color color) {
-    return Expanded(child: Column(children: [
+    return Expanded(
+        child: Column(children: [
       FittedBox(
-        child: Text(value, style: GoogleFonts.dmSans(
-          fontSize: 14, fontWeight: FontWeight.w700, color: color,
-        )),
+        child: Text(value,
+            style: GoogleFonts.dmSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: color,
+            )),
       ),
       const SizedBox(height: 2),
-      Text(label, style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.sub)),
+      Text(label,
+          style: GoogleFonts.dmSans(fontSize: 10, color: AppColors.sub)),
     ]));
   }
 
@@ -695,45 +814,60 @@ class _CaisseScreenState extends State<CaisseScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
-        children: cash.closures.map((closure) => Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(children: [
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.gold.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              alignment: Alignment.center,
-              child: const Text('📅', style: TextStyle(fontSize: 20)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(closure.day, style: GoogleFonts.dmSans(
-                  fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.text,
-                )),
-                if (closure.advancesDeducted > 0)
-                  Text('سلف -${closure.advancesDeducted.toStringAsFixed(0)} DT',
-                      style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.sub)),
-              ]),
-            ),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('${closure.total.toStringAsFixed(0)} DT',
-                  style: GoogleFonts.playfairDisplay(
-                    fontSize: 17, fontWeight: FontWeight.w700, color: AppColors.gold,
-                  )),
-              Text('صافي ${closure.netSalon.toStringAsFixed(0)} DT',
-                  style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.sub)),
-            ]),
-          ]),
-        )).toList(),
+        children: cash.closures
+            .map((closure) => Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppColors.gold.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text('📅', style: TextStyle(fontSize: 20)),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(closure.day,
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.text,
+                                )),
+                            if (closure.advancesDeducted > 0)
+                              Text(
+                                  'سلف -${closure.advancesDeducted.toStringAsFixed(0)} DT',
+                                  style: GoogleFonts.dmSans(
+                                      fontSize: 11, color: AppColors.sub)),
+                          ]),
+                    ),
+                    Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text('${closure.total.toStringAsFixed(0)} DT',
+                              style: GoogleFonts.playfairDisplay(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.gold,
+                              )),
+                          Text('صافي ${closure.netSalon.toStringAsFixed(0)} DT',
+                              style: GoogleFonts.dmSans(
+                                  fontSize: 11, color: AppColors.sub)),
+                        ]),
+                  ]),
+                ))
+            .toList(),
       ),
     );
   }
@@ -766,7 +900,8 @@ class _CompleteSheetState extends State<_CompleteSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
         decoration: const BoxDecoration(
@@ -776,7 +911,8 @@ class _CompleteSheetState extends State<_CompleteSheet> {
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
               color: AppColors.border,
               borderRadius: BorderRadius.circular(50),
@@ -810,14 +946,18 @@ class _CompleteSheetState extends State<_CompleteSheet> {
                           : AppColors.card,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color:
-                            _method == option[0] ? AppColors.gold : AppColors.border,
+                        color: _method == option[0]
+                            ? AppColors.gold
+                            : AppColors.border,
                       ),
                     ),
-                    child: Text(option[1], style: AppTextStyle.dmSans(
-                      size: 12,
-                      color: _method == option[0] ? AppColors.gold : AppColors.sub,
-                    )),
+                    child: Text(option[1],
+                        style: AppTextStyle.dmSans(
+                          size: 12,
+                          color: _method == option[0]
+                              ? AppColors.gold
+                              : AppColors.sub,
+                        )),
                   ),
                 ),
               ),
@@ -838,7 +978,8 @@ class _CompleteSheetState extends State<_CompleteSheet> {
             text: 'أكد الخلاص',
             onPressed: () => Navigator.pop(
               context,
-              _CompletePayload(_method, double.tryParse(_tipCtrl.text.trim()) ?? 0),
+              _CompletePayload(
+                  _method, double.tryParse(_tipCtrl.text.trim()) ?? 0),
             ),
           ),
         ]),
