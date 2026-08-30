@@ -383,6 +383,27 @@ au moment du choix : le fichier est gardé, puis envoyé une fois l'identifiant
 obtenu. Un échec d'envoi n'emporte pas la création — le salon existe, il lui
 manque sa vitrine, et le gérant l'ajoute depuis la gestion.
 
+### Reels : le j'aime prévient l'auteur, le bouton « احجز » mène quelque part
+
+Le like était **enregistré mais silencieux** : un coiffeur ne savait jamais que
+sa vidéo plaisait, ce qui est pourtant tout l'intérêt de publier. L'auteur est
+maintenant prévenu — et lui seul.
+
+Deux garde-fous contre le bruit : rien n'est envoyé quand un like est
+**retiré** (ce n'est pas une nouvelle), ni pour un **auto-like** — un coiffeur
+n'a pas besoin qu'on lui apprenne qu'il aime sa propre vidéo.
+
+Le bouton **« احجز »** dépendait entièrement de callbacks facultatifs. Ouvert
+depuis le menu du profil, le lecteur n'en recevait aucun : le bouton était
+parfaitement inerte, sans le moindre signe. Ouvert depuis « En vogue », il
+n'avait que le chemin coiffeur — un reel publié par le salon lui-même ne menait
+donc nulle part non plus.
+
+Les deux hôtes fournissent désormais les deux chemins, la coquille sait
+résoudre un salon depuis son seul identifiant (c'est tout ce que porte un
+reel), et le lecteur **le dit** quand il ne peut pas ouvrir l'auteur plutôt que
+de ne rien faire.
+
 ### Médias : Cloudinary, photos et reels (§3.2, §3.8)
 
 Photos de salon et **reels vidéo** passent par Cloudinary quand ses clés sont

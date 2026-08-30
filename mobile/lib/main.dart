@@ -402,14 +402,19 @@ class _AppShellState extends State<_AppShell> {
                 onStyleDna: _goStyleDna,
               ),
         LamssaTab.explore => ExploreScreen(onGoSalon: _goSalon),
-        LamssaTab.trending => TrendingScreen(onGoStaff: _goStaffById),
+        LamssaTab.trending => TrendingScreen(
+            onGoStaff: _goStaffById, onGoSalon: _goSalonById),
         LamssaTab.dashboard => const CaisseScreen(),
         LamssaTab.agenda => const CoiffeurDashboardScreen(),
         LamssaTab.cash => const CoiffeurDashboardScreen(showAgendaOnly: true),
         LamssaTab.notifications => NotificationsScreen(
             onOpen: (notif) => _openNotification(notif.type, notif.data),
           ),
-        LamssaTab.profile => ProfileScreen(onSignedOut: _onSignedOut),
+        LamssaTab.profile => ProfileScreen(
+            onSignedOut: _onSignedOut,
+            onGoStaff: _goStaffById,
+            onGoSalon: _goSalonById,
+          ),
       };
 
   /// Depuis le fil « En vogue » on n'a que l'identifiant du coiffeur : on charge
@@ -420,6 +425,21 @@ class _AppShellState extends State<_AppShell> {
       final profile = await context.read<SalonRepository>().staffProfile(staffId);
       if (!mounted) return;
       setState(() => _currentCoiffeur = profile.coiffeur);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      showAppSnack(context, e.message);
+    }
+  }
+
+  /// Ouvre la fiche d'un salon connu par son seul identifiant.
+  ///
+  /// Les reels ne portent qu'un `salon_id` : sans cette résolution, le bouton
+  /// « احجز » d'un reel de salon n'avait nulle part où aller.
+  Future<void> _goSalonById(String salonId) async {
+    try {
+      final detail = await context.read<SalonRepository>().detail(salonId);
+      if (!mounted) return;
+      _goSalon(detail.salon);
     } on ApiException catch (e) {
       if (!mounted) return;
       showAppSnack(context, e.message);

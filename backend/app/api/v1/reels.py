@@ -18,7 +18,8 @@ from app.core.deps import get_salon
 from app.core.security import current_user, optional_user
 from app.core.timeutils import utcnow
 from app.models.documents import Reel, Salon, StaffMember, User
-from app.models.enums import Role
+from app.models.enums import NotificationType, Role
+from app.services.notification_service import notify
 from app.services import cloudinary_service
 
 router = APIRouter()
@@ -168,12 +169,29 @@ async def toggle_like(reel_id: PydanticObjectId, user: User = Depends(current_us
     reel = await Reel.get(reel_id)
     if reel is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Reel introuvable")
-    if user.id in reel.liked_by:
-        reel.liked_by.remove(user.id)
-    else:
+    ajoute = user.id not in reel.liked_by
+    if ajoute:
         reel.liked_by.append(user.id)
+    else:
+        reel.liked_by.remove(user.id)
     reel.likes = len(reel.liked_by)
     await reel.save()
+
+    # Prévenir l'auteur, et lui seul.
+    #
+    # Seulement à l'ajout : retirer un like n'est pas une nouvelle à annoncer.
+    # Et jamais pour un auto-like — un coiffeur n'a pas besoin qu'on lui
+    # apprenne qu'il aime sa propre vidéo.
+    if ajoute and reel.author_id != user.id:
+        await notify(
+            reel.author_id,
+            NotificationType.REEL_LIKED,
+            "Nouveau j'aime ❤️",
+            f"{user.name or 'Un client'} a aimé votre reel"
+            + (f" « {reel.caption[:40]} »" if reel.caption else ""),
+            {"reel_id": str(reel.id), "salon_id": str(reel.salon_id)},
+        )
+
     return {"likes": reel.likes, "liked_by_me": user.id in reel.liked_by}
 
 

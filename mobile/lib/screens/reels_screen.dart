@@ -124,12 +124,22 @@ class _ReelsScreenState extends State<ReelsScreen> {
     controller.toggleLike(reel);
   }
 
+  /// Ouvre l'auteur du reel — le coiffeur s'il y en a un, le salon sinon.
+  ///
+  /// Le bouton « احجز » dépendait entièrement de callbacks facultatifs : un
+  /// hôte qui les oubliait laissait un bouton parfaitement inerte, sans le
+  /// moindre signe. On le dit plutôt que de ne rien faire.
   void _openAuthor(Reel reel) {
-    if (reel.staffId != null && widget.onGoStaff != null) {
-      widget.onGoStaff!(reel.staffId!);
-    } else if (widget.onGoSalon != null) {
-      widget.onGoSalon!(reel.salonId);
+    final staffId = reel.staffId;
+    if (staffId != null && widget.onGoStaff != null) {
+      widget.onGoStaff!(staffId);
+      return;
     }
+    if (widget.onGoSalon != null) {
+      widget.onGoSalon!(reel.salonId);
+      return;
+    }
+    showAppSnack(context, 'ما نجّمناش نحلّو الصالون من هنا');
   }
 
   Future<void> _pickAndPublish() async {

@@ -101,6 +101,7 @@ class NotificationType(str, Enum):
     CLOSURE_READY = "closure_ready"
     NEW_PORTFOLIO = "new_portfolio"
     NEW_REVIEW = "new_review"
+    REEL_LIKED = "reel_liked"
 
 
 class ChargePeriod(str, Enum):

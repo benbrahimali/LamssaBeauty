@@ -16,10 +16,14 @@ import 'reels_screen.dart';
 /// et passe de l'image à la réservation. C'est le levier d'acquisition décrit
 /// au §8.3 : on ne vend pas un salon, on montre son travail.
 class TrendingScreen extends StatefulWidget {
-  const TrendingScreen({super.key, required this.onGoStaff});
+  const TrendingScreen({super.key, required this.onGoStaff, this.onGoSalon});
 
   /// Ouvre le profil du coiffeur — d'où part la réservation.
   final void Function(String staffId) onGoStaff;
+
+  /// Un reel publié par le salon lui-même n'a pas de coiffeur : sans ce
+  /// chemin, son bouton « احجز » ne menait nulle part.
+  final void Function(String salonId)? onGoSalon;
 
   @override
   State<TrendingScreen> createState() => _TrendingScreenState();
@@ -60,7 +64,10 @@ class _TrendingScreenState extends State<TrendingScreen> {
           // d'ici plutôt que d'ajouter un sixième onglet à la barre.
           GestureDetector(
             onTap: () => Navigator.of(context).push(MaterialPageRoute(
-              builder: (_) => ReelsScreen(onGoStaff: widget.onGoStaff),
+              builder: (_) => ReelsScreen(
+                onGoStaff: widget.onGoStaff,
+                onGoSalon: widget.onGoSalon,
+              ),
             )),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),

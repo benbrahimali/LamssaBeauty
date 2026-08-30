@@ -18,9 +18,19 @@ import 'reels_screen.dart';
 import 'salon_qr_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key, required this.onSignedOut});
+  const ProfileScreen({
+    super.key,
+    required this.onSignedOut,
+    this.onGoStaff,
+    this.onGoSalon,
+  });
 
   final VoidCallback onSignedOut;
+
+  /// Navigation vers l'auteur d'un reel. Sans elle, le bouton « احجز » du
+  /// lecteur ouvert depuis ce menu ne menait nulle part.
+  final void Function(String staffId)? onGoStaff;
+  final void Function(String salonId)? onGoSalon;
 
   @override
   Widget build(BuildContext context) {
@@ -443,7 +453,10 @@ class ProfileScreen extends StatelessWidget {
                     ));
                   case 'reels':
                     await Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => const ReelsScreen(),
+                      builder: (_) => ReelsScreen(
+                        onGoStaff: onGoStaff,
+                        onGoSalon: onGoSalon,
+                      ),
                     ));
                   case 'salon_qr':
                     await Navigator.of(context).push(MaterialPageRoute(
