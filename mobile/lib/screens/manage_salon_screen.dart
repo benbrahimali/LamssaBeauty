@@ -453,7 +453,8 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
               ),
               child: Row(children: [
                 SizedBox(
-                  width: 52,
+                  // Assez large pour « الأربعاء », le plus long des sept.
+                  width: 78,
                   child: Text(jour.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

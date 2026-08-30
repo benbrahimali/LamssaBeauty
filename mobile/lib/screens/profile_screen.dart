@@ -335,7 +335,11 @@ class ProfileScreen extends StatelessWidget {
   Widget _buildMenu(BuildContext context, AuthController auth) {
     final loggedIn = auth.status == AuthStatus.loggedIn;
     final items = <Map<String, Object>>[
-      if (loggedIn)
+      // « مواعيدي » liste les RDV qu'on a PRIS, jamais ceux qu'on reçoit :
+      // c'est la vue client. En vue salon ou coiffeur, elle était vide et
+      // laissait croire que les rendez-vous du salon avaient disparu — leur
+      // planning vit dans l'agenda, pas ici.
+      if (loggedIn && auth.role == AppRole.client)
         {
           'icon': Icons.calendar_month_rounded,
           'label': 'مواعيدي',

@@ -343,14 +343,16 @@ Map<String, DayHours> parseWeekHours(dynamic raw) {
 ///
 /// La semaine commence lundi : c'est la convention du backend, et un décalage
 /// ici ferait poser le repos du dimanche sur le lundi.
+/// Les noms complets en arabe standard, pas les abréviations dialectales :
+/// c'est un réglage qu'on lit une fois et qu'on doit comprendre sans hésiter.
 const kWeekdays = <({String key, String label})>[
-  (key: 'mon', label: 'ثنين'),
-  (key: 'tue', label: 'ثلاث'),
-  (key: 'wed', label: 'ربعا'),
-  (key: 'thu', label: 'خميس'),
-  (key: 'fri', label: 'جمعة'),
-  (key: 'sat', label: 'سبت'),
-  (key: 'sun', label: 'حدّ'),
+  (key: 'mon', label: 'الاثنين'),
+  (key: 'tue', label: 'الثلاثاء'),
+  (key: 'wed', label: 'الأربعاء'),
+  (key: 'thu', label: 'الخميس'),
+  (key: 'fri', label: 'الجمعة'),
+  (key: 'sat', label: 'السبت'),
+  (key: 'sun', label: 'الأحد'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
