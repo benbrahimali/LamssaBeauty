@@ -9,9 +9,23 @@ from fastapi.responses import FileResponse
 from app.core.deps import my_staff_profile
 from app.core.security import require_role
 from app.core.timeutils import local_day_bounds, local_month_bounds, local_week_bounds, to_local, utcnow
-from app.models.documents import RecurringCharge, CashClosure, Expense, Salon, StaffMember, User
+from app.models.documents import (
+    CashClosure,
+    CashMovement,
+    Expense,
+    RecurringCharge,
+    Salon,
+    StaffMember,
+    User,
+)
 from app.models.enums import NotificationType, Role
-from app.schemas.cash import RecurringChargeCreate, RecurringChargeUpdate, ClosureCreate, ExpenseCreate
+from app.schemas.cash import (
+    CashMovementCreate,
+    ClosureCreate,
+    ExpenseCreate,
+    RecurringChargeCreate,
+    RecurringChargeUpdate,
+)
 from app.services.cash_service import (
     DAYS_PER_MONTH,
     close_day,
@@ -23,6 +37,7 @@ from app.services.cash_service import (
     profit_and_loss,
     staff_day_summary,
     staff_month_balance,
+    treasury,
 )
 from app.services.notification_service import notify
 from app.services.report_service import generate_closure_report
@@ -284,6 +299,7 @@ async def add_expense(
         label=body.label,
         amount=body.amount,
         category=body.category,
+        paid_from=body.paid_from,
         spent_at=body.spent_at or utcnow(),
         created_by=user.id,
     )
@@ -317,6 +333,83 @@ async def delete_expense(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Trésorerie : l'état du tiroir (§3.4)
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/treasury", summary="État de la caisse : espèces attendues et banque")
+async def get_treasury(
+    salon_id: PydanticObjectId,
+    day: date | None = None,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    """Ce que le tiroir devrait contenir, et le détail de chaque ligne.
+
+    Réservé au gérant : le solde de caisse n'est pas une information d'équipe.
+    """
+    await _my_salon(salon_id, user)
+    return await treasury(salon_id, day or to_local(utcnow()).date())
+
+
+@router.post("/movements", status_code=201, summary="Fond de caisse, apport ou prélèvement")
+async def create_movement(
+    body: CashMovementCreate, user: User = Depends(require_role(Role.OWNER))
+):
+    await _my_salon(body.salon_id, user)
+    day = body.day or to_local(utcnow()).date()
+
+    # Une journée clôturée est arrêtée : la rouvrir par un mouvement rendrait
+    # le rapport déjà signé faux.
+    if await CashClosure.find_one(
+        CashClosure.salon_id == body.salon_id, CashClosure.day == day
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"La journée du {day} est clôturée : aucun mouvement ne peut s'y ajouter",
+        )
+
+    movement = CashMovement(
+        salon_id=body.salon_id,
+        type=body.type,
+        amount=round(body.amount, 2),
+        label=body.label.strip(),
+        day=day,
+        created_by=user.id,
+    )
+    await movement.insert()
+    return movement
+
+
+@router.get("/movements", summary="Historique des mouvements d'espèces")
+async def list_movements(
+    salon_id: PydanticObjectId,
+    day: date | None = None,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    await _my_salon(salon_id, user)
+    query = {"salon_id": salon_id}
+    if day is not None:
+        query["day"] = day
+    return await CashMovement.find(query).sort("-created_at").limit(200).to_list()
+
+
+@router.delete("/movements/{movement_id}", summary="Supprimer un mouvement")
+async def delete_movement(
+    movement_id: PydanticObjectId, user: User = Depends(require_role(Role.OWNER))
+):
+    movement = await CashMovement.get(movement_id)
+    if not movement:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Mouvement introuvable")
+    await _my_salon(movement.salon_id, user)
+    if await CashClosure.find_one(
+        CashClosure.salon_id == movement.salon_id, CashClosure.day == movement.day
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Journée clôturée : le mouvement est figé"
+        )
+    await movement.delete()
+    return {"removed": str(movement_id)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Clôture de journée (§5.4)
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("/closures", status_code=201, summary="Clôturer la journée")
@@ -325,7 +418,14 @@ async def create_closure(
 ):
     salon = await _my_salon(body.salon_id, user)
     day = body.day or to_local(utcnow()).date()
-    closure = await close_day(salon, day, user)
+    closure = await close_day(
+        salon,
+        day,
+        user,
+        counted_cash=body.counted_cash,
+        withdrawal=body.withdrawal,
+        variance_reason=body.variance_reason,
+    )
 
     try:
         closure.report_path = generate_closure_report(salon, closure)

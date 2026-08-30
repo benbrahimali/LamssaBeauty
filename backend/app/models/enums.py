@@ -110,6 +110,23 @@ class ChargePeriod(str, Enum):
     YEARLY = "yearly"
 
 
+class CashMovementType(str, Enum):
+    """Mouvements d'espèces qui ne passent par aucune prestation (§3.4)."""
+    OPENING_FLOAT = "opening_float"   # fond de caisse déclaré le matin
+    DEPOSIT = "deposit"               # le gérant remet de l'argent dans le tiroir
+    WITHDRAWAL = "withdrawal"         # prélèvement, dépôt en banque, achat hors salon
+
+
+class PaymentSource(str, Enum):
+    """D'où sort l'argent d'une dépense ou d'une tséb9a.
+
+    Une charge payée par virement ne touche pas le tiroir : sans cette
+    distinction, le solde théorique de la caisse serait faux tous les mois.
+    """
+    CASH = "cash"                     # du tiroir
+    BANK = "bank"                     # virement, chèque, carte du salon
+
+
 class SubscriptionStatus(str, Enum):
     TRIAL = "trial"
     ACTIVE = "active"

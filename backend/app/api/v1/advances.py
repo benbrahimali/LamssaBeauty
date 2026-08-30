@@ -113,6 +113,7 @@ async def decide_advance(
 
     advance.status = AdvanceStatus.APPROVED if body.approve else AdvanceStatus.REJECTED
     advance.decided_at = utcnow()
+    advance.paid_from = body.paid_from
     advance.decided_by = user.id
     if body.reason:
         advance.reason = f"{advance.reason} | {body.reason}".strip(" |")

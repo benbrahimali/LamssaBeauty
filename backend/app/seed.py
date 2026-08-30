@@ -16,6 +16,7 @@ from app.services import public_code
 from app.models.documents import (
     ALL_DOCUMENTS,
     Advance,
+    CashMovement,
     Booking,
     GeoPoint,
     PortfolioItem,
@@ -28,6 +29,7 @@ from app.models.documents import (
 )
 from app.models.enums import (
     AdvanceStatus,
+    CashMovementType,
     BookingSource,
     BookingStatus,
     CommissionType,
@@ -282,6 +284,19 @@ async def seed() -> None:
                 status=BookingStatus.CONFIRMED,
                 client_name=client.name,
             ).insert()
+
+        # ── Fond de caisse du jour ──
+        # Sans lui, la trésorerie de démo démarre à zéro et le premier achat
+        # de produits affiche un tiroir négatif : aucun salon ne fonctionne
+        # ainsi, on ouvre toujours avec de la monnaie.
+        await CashMovement(
+            salon_id=salon.id,
+            type=CashMovementType.OPENING_FLOAT,
+            amount=200.0,
+            label="Fond de caisse",
+            day=to_local(utcnow()).date(),
+            created_by=salon.owner_id,
+        ).insert()
 
         # ── Une tséb9a en attente pour tester le circuit de validation ──
         await Advance(

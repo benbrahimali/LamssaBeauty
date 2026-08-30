@@ -11,9 +11,11 @@ from app.models.enums import (
     ChargePeriod,
     BookingSource,
     BookingStatus,
+    CashMovementType,
     CommissionType,
     NotificationType,
     PaymentMethod,
+    PaymentSource,
     PaymentStatus,
     ReviewStatus,
     Role,
@@ -295,6 +297,7 @@ class Advance(Document):
     staff_id: PydanticObjectId
     amount: float
     reason: str = ""
+    paid_from: PaymentSource = PaymentSource.CASH
     status: AdvanceStatus = AdvanceStatus.PENDING
     requested_at: datetime = Field(default_factory=utcnow)
     decided_at: datetime | None = None
@@ -316,6 +319,9 @@ class Expense(Document):
     label: str
     amount: float
     category: str = "autre"
+    # Une dépense réglée par virement ne vide pas le tiroir : sans cette
+    # distinction le solde théorique de la caisse dérive dès le premier loyer.
+    paid_from: PaymentSource = PaymentSource.CASH
     spent_at: datetime = Field(default_factory=utcnow)
     created_by: PydanticObjectId | None = None
 
@@ -338,6 +344,19 @@ class CashClosure(Document):
     by_method: dict[str, float] = {}
     by_staff: dict[str, dict] = {}
     transaction_count: int = 0
+
+    # Trésorerie : ce que le tiroir devait contenir, ce qu'il contenait
+    # vraiment, et ce que le gérant en a sorti. `counted_cash` reste None
+    # quand personne n'a compté — on n'invente pas un écart de zéro.
+    opening_float: float = 0.0
+    expected_cash: float = 0.0
+    counted_cash: float | None = None
+    cash_variance: float = 0.0
+    variance_reason: str = ""
+    withdrawal: float = 0.0
+    closing_float: float = 0.0
+    bank_total: float = 0.0
+
     locked: bool = True
     report_path: str | None = None
     created_by: PydanticObjectId | None = None
@@ -350,6 +369,27 @@ class CashClosure(Document):
                 [("salon_id", pymongo.ASCENDING), ("day", pymongo.ASCENDING)], unique=True
             )
         ]
+
+
+class CashMovement(Document):
+    """Entrée ou sortie d'espèces sans prestation : fond de caisse, apport,
+    prélèvement (§3.4).
+
+    Le montant est toujours positif ; c'est le type qui donne le sens. Le
+    rattachement se fait à une journée locale et non à un instant, parce que
+    c'est la journée que le gérant clôture.
+    """
+    salon_id: PydanticObjectId
+    type: CashMovementType
+    amount: float
+    label: str = ""
+    day: date
+    created_by: PydanticObjectId | None = None
+    created_at: datetime = Field(default_factory=utcnow)
+
+    class Settings:
+        name = "cash_movements"
+        indexes = [IndexModel([("salon_id", pymongo.ASCENDING), ("day", pymongo.ASCENDING)])]
 
 
 class Payment(Document):
@@ -512,6 +552,7 @@ ALL_DOCUMENTS = [
     Advance,
     Expense,
     CashClosure,
+    CashMovement,
     Payment,
     Review,
     PortfolioItem,

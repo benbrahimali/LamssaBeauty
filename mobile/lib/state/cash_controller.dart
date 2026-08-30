@@ -124,12 +124,21 @@ class CashController extends ChangeNotifier {
     }
   }
 
-  Future<String?> addExpense(String label, double amount, {String category = 'autre'}) async {
+  /// Saisit une dépense.
+  ///
+  /// [paidFrom] dit si l'argent sort du tiroir ou de la banque : une charge
+  /// réglée par virement ne doit pas faire baisser le solde de caisse.
+  Future<String?> addExpense(String label, double amount,
+      {String category = 'autre', String paidFrom = 'cash'}) async {
     final salonId = _salonId;
     if (salonId == null) return 'Aucun salon sélectionné';
     try {
       await _cash.addExpense(
-          salonId: salonId, label: label, amount: amount, category: category);
+          salonId: salonId,
+          label: label,
+          amount: amount,
+          category: category,
+          paidFrom: paidFrom);
       await load();
       return null;
     } on ApiException catch (e) {
@@ -155,17 +164,77 @@ class CashController extends ChangeNotifier {
     }
   }
 
-  Future<ClosureResult?> closeDay() async {
+  /// Clôture la journée.
+  ///
+  /// [countedCash] null = le gérant n'a pas compté son tiroir ; l'écart n'est
+  /// alors pas calculé plutôt qu'affiché à zéro.
+  Future<ClosureResult?> closeDay({
+    double? countedCash,
+    double withdrawal = 0,
+    String varianceReason = '',
+  }) async {
     final salonId = _salonId;
     if (salonId == null) return null;
     try {
-      final closure = await _cash.closeDay(salonId);
+      final closure = await _cash.closeDay(
+        salonId,
+        countedCash: countedCash,
+        withdrawal: withdrawal,
+        varianceReason: varianceReason,
+      );
       await load();
       return closure;
     } on ApiException catch (e) {
       _error = e.message;
       notifyListeners();
       return null;
+    }
+  }
+
+  /// Retire un mouvement saisi par erreur. Refusé côté serveur si la journée
+  /// est déjà clôturée : le rapport signé ne doit pas bouger.
+  Future<bool> removeMovementById(String movementId) async {
+    try {
+      await _cash.removeMovement(movementId);
+      await load();
+      return true;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// État du tiroir aujourd'hui, pour le comparer à ce qu'on y compte.
+  Future<Treasury?> treasury() async {
+    final salonId = _salonId;
+    if (salonId == null) return null;
+    try {
+      return await _cash.treasury(salonId);
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  /// Fond de caisse, apport ou prélèvement.
+  Future<bool> addMovement({
+    required String type,
+    required double amount,
+    String label = '',
+  }) async {
+    final salonId = _salonId;
+    if (salonId == null) return false;
+    try {
+      await _cash.addMovement(
+          salonId: salonId, type: type, amount: amount, label: label);
+      await load();
+      return true;
+    } on ApiException catch (e) {
+      _error = e.message;
+      notifyListeners();
+      return false;
     }
   }
 }

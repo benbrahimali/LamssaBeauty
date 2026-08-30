@@ -54,14 +54,24 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final rows = await context.read<CashRepository>().expenses(widget.salonId);
+      final rows =
+          await context.read<CashRepository>().expenses(widget.salonId);
       if (!mounted) return;
-      setState(() { _expenses = rows; _loading = false; });
+      setState(() {
+        _expenses = rows;
+        _loading = false;
+      });
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() { _error = e.message; _loading = false; });
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
     }
   }
 
@@ -76,7 +86,9 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
     setState(() => _saving = true);
     // Passe par le contrôleur : la caisse du jour doit se recalculer, sinon le
     // net affiché ne tient pas compte de la dépense qu'on vient de saisir.
-    final error = await context.read<CashController>().addExpense(label, amount);
+    final error = await context
+        .read<CashController>()
+        .addExpense(label, amount, paidFrom: _paidFrom);
     if (!mounted) return;
     setState(() => _saving = false);
     if (error != null) {
@@ -90,7 +102,8 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
 
   Future<void> _remove(Expense expense) async {
     final before = _expenses;
-    setState(() => _expenses = _expenses.where((e) => e.id != expense.id).toList());
+    setState(
+        () => _expenses = _expenses.where((e) => e.id != expense.id).toList());
     try {
       await context.read<CashRepository>().removeExpense(expense.id);
       if (!mounted) return;
@@ -107,7 +120,8 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Container(
         padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
         constraints: BoxConstraints(
@@ -119,7 +133,8 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
               color: AppColors.border,
               borderRadius: BorderRadius.circular(2),
@@ -143,52 +158,101 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
     );
   }
 
+  /// D'où sort l'argent. Le tiroir par défaut : c'est le cas de la majorité
+  /// des achats d'un salon, le loyer étant l'exception qu'on déclare.
+  String _paidFrom = 'cash';
+
+  Widget _buildSource() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: Row(children: [
+        Text('خلّصت بـ',
+            style: AppTextStyle.dmSans(size: 11, color: AppColors.sub)),
+        const SizedBox(width: 10),
+        ...[('cash', 'كاش'), ('bank', 'تحويل')].map((choix) {
+          final actif = _paidFrom == choix.$1;
+          return Padding(
+            padding: const EdgeInsetsDirectional.only(end: 8),
+            child: GestureDetector(
+              onTap: () => setState(() => _paidFrom = choix.$1),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: actif
+                      ? AppColors.gold.withValues(alpha: 0.15)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: actif ? AppColors.gold : AppColors.border),
+                ),
+                child: Text(choix.$2,
+                    style: AppTextStyle.dmSans(
+                        size: 11,
+                        color: actif ? AppColors.gold : AppColors.sub,
+                        weight: actif ? FontWeight.w700 : FontWeight.w400)),
+              ),
+            ),
+          );
+        }),
+      ]),
+    );
+  }
+
   Widget _buildForm() {
-    return Row(children: [
-      Expanded(
-        flex: 3,
-        child: TextField(
-          controller: _label,
-          style: AppTextStyle.dmSans(size: 13),
-          decoration: _decoration('كراء، مواد…'),
-        ),
-      ),
-      const SizedBox(width: 8),
-      Expanded(
-        child: TextField(
-          controller: _amount,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-          style: AppTextStyle.dmSans(size: 13),
-          decoration: _decoration('DT'),
-        ),
-      ),
-      const SizedBox(width: 8),
-      GestureDetector(
-        onTap: _saving ? null : _add,
-        child: Container(
-          width: 46, height: 46,
-          decoration: BoxDecoration(
-            color: AppColors.gold,
-            borderRadius: BorderRadius.circular(14),
+    return Column(children: [
+      Row(children: [
+        Expanded(
+          flex: 3,
+          child: TextField(
+            controller: _label,
+            style: AppTextStyle.dmSans(size: 13),
+            decoration: _decoration('كراء، مواد…'),
           ),
-          alignment: Alignment.center,
-          child: _saving
-              ? const SizedBox(
-                  width: 18, height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.black),
-                )
-              : const Icon(Icons.add_rounded, color: Colors.black),
         ),
-      ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: TextField(
+            controller: _amount,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))
+            ],
+            style: AppTextStyle.dmSans(size: 13),
+            decoration: _decoration('DT'),
+          ),
+        ),
+        const SizedBox(width: 8),
+        GestureDetector(
+          onTap: _saving ? null : _add,
+          child: Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: AppColors.gold,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            alignment: Alignment.center,
+            child: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.black),
+                  )
+                : const Icon(Icons.add_rounded, color: Colors.black),
+          ),
+        ),
+      ]),
+      _buildSource(),
     ]);
   }
 
   Widget _buildList() {
     if (_loading) return const SizedBox(height: 120, child: AppLoader());
     if (_error != null) {
-      return SizedBox(height: 140, child: AppError(message: _error!, onRetry: _load));
+      return SizedBox(
+          height: 140, child: AppError(message: _error!, onRetry: _load));
     }
     if (_expenses.isEmpty) {
       return Padding(
@@ -212,18 +276,21 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
           ),
           child: Row(children: [
             Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(expense.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyle.dmSans(weight: FontWeight.w600)),
-                if (expense.spentAt != null)
-                  Text(
-                    '${expense.spentAt!.day.toString().padLeft(2, '0')}/'
-                    '${expense.spentAt!.month.toString().padLeft(2, '0')}',
-                    style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
-                  ),
-              ]),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(expense.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyle.dmSans(weight: FontWeight.w600)),
+                    if (expense.spentAt != null)
+                      Text(
+                        '${expense.spentAt!.day.toString().padLeft(2, '0')}/'
+                        '${expense.spentAt!.month.toString().padLeft(2, '0')}',
+                        style:
+                            AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+                      ),
+                  ]),
             ),
             Text('-${expense.amount.toStringAsFixed(0)} DT',
                 style: AppTextStyle.dmSans(
@@ -233,7 +300,8 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
               behavior: HitTestBehavior.opaque,
               child: const Padding(
                 padding: EdgeInsets.only(left: 10),
-                child: Icon(Icons.close_rounded, size: 18, color: AppColors.sub),
+                child:
+                    Icon(Icons.close_rounded, size: 18, color: AppColors.sub),
               ),
             ),
           ]),

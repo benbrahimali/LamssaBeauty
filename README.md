@@ -159,6 +159,51 @@ commission — c'est un don au geste, pas un chiffre d'affaires.
 Vérifié en conditions réelles : couleur 60 DT, commission 35 %, produit 15 DT,
 pourboire 10 DT → **coiffeur 15,75 + 10 de pourboire, salon 44,25**.
 
+### Trésorerie : ce qu'il y a vraiment dans le tiroir (§3.4)
+
+La caisse du jour dit ce qui a été **encaissé**. La trésorerie dit ce qui est
+**physiquement dans le tiroir**. Les deux divergent dès la première carte
+bancaire, et c'est cet écart qu'aucun gérant ne suit correctement de tête.
+
+```
+solde attendu = fond de caisse
+              + encaissements espèces (prestation + pourboire)
+              + apports
+              − dépenses réglées en espèces
+              − tséb9as versées en espèces
+              − prélèvements
+```
+
+Trois séparations font tout le travail :
+
+- **Espèces et banque ne se mélangent pas.** Un règlement par TPE ou en ligne
+  part à la banque sans jamais passer par le tiroir. Les confondre est la
+  première cause d'écart inexpliqué : le gérant cherche 800 DT qui n'ont
+  jamais existé en billets.
+- **Chaque dépense déclare sa source** (`paid_from`). Un loyer viré depuis le
+  compte ne vide pas le tiroir ; des produits payés au comptoir, si. Sans
+  cette distinction le solde théorique dérive dès le premier mois.
+- **Une tséb9a sort du tiroir le jour où elle est accordée**, pas le jour où
+  elle est demandée ni celui de la paie.
+
+**Le comptage du soir reste facultatif.** Beaucoup de gérants ferment sans
+compter ; les y obliger ferait saisir n'importe quel chiffre. Tant que
+`counted_cash` est absent, aucun écart n'est affiché — un écart de zéro
+inventé vaudrait moins que pas d'écart du tout. Quand le comptage a lieu,
+c'est **lui** qui fait foi : l'écart est enregistré tel quel plutôt que
+corrigé en silence, avec son motif, et c'est le montant compté — non le
+théorique — qui devient le fond de caisse du lendemain, une fois le
+prélèvement du soir retiré.
+
+Le solde peut devenir négatif, et l'app l'affiche en rouge au lieu de le
+ramener à zéro : des sorties sans fond de caisse sont une anomalie réelle que
+le gérant doit voir. Une journée clôturée est arrêtée — plus aucun mouvement
+ne s'y ajoute, sinon le rapport déjà signé deviendrait faux.
+
+`GET /cash/treasury` rend le détail ligne par ligne ; `POST /cash/movements`
+enregistre fond de caisse, apport et prélèvement. Le solde du tiroir n'est
+jamais visible par l'équipe : c'est une information de gérant.
+
 ### Médias : Cloudinary, photos et reels (§3.2, §3.8)
 
 Photos de salon et **reels vidéo** passent par Cloudinary quand ses clés sont

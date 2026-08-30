@@ -10,6 +10,7 @@ from app.core.timeutils import local_day_bounds, local_month_bounds, utcnow
 from app.models.documents import (
     Advance,
     CashClosure,
+    CashMovement,
     Expense,
     RecurringCharge,
     Salon,
@@ -17,7 +18,13 @@ from app.models.documents import (
     Transaction,
     User,
 )
-from app.models.enums import AdvanceStatus, ChargePeriod
+from app.models.enums import (
+    AdvanceStatus,
+    CashMovementType,
+    ChargePeriod,
+    PaymentMethod,
+    PaymentSource,
+)
 
 
 def _blank_staff_row() -> dict:
@@ -139,8 +146,167 @@ async def staff_day_summary(staff: StaffMember, day: date) -> dict:
     }
 
 
-async def close_day(salon: Salon, day: date, actor: User) -> CashClosure:
-    """Clôture : agrège, déduit les tséb9as approuvées, verrouille les transactions (§5.4)."""
+def drawer_balance(
+    opening: float,
+    cash_in: float,
+    deposits: float,
+    cash_expenses: float,
+    cash_advances: float,
+    withdrawals: float,
+) -> float:
+    """Ce que le tiroir devrait contenir, à partir de ses seules causes.
+
+    Isolé du stockage pour rester vérifiable : c'est le chiffre que le gérant
+    va comparer à ce qu'il compte à la main, et il n'a droit à aucune
+    approximation.
+    """
+    return round(
+        opening + cash_in + deposits - cash_expenses - cash_advances - withdrawals, 2
+    )
+
+
+async def opening_float(salon_id: PydanticObjectId, day: date) -> float:
+    """Ce que le tiroir contenait en ouvrant.
+
+    Le gérant peut l'avoir déclaré ; sinon c'est ce qu'il a laissé en fermant
+    la veille. À défaut de tout historique, zéro — un fond de caisse inventé
+    fausserait le premier écart constaté.
+    """
+    declared = await CashMovement.find(
+        CashMovement.salon_id == salon_id,
+        CashMovement.day == day,
+        CashMovement.type == CashMovementType.OPENING_FLOAT,
+    ).sort("-created_at").first_or_none()
+    if declared is not None:
+        return round(declared.amount, 2)
+
+    previous = await CashClosure.find(
+        CashClosure.salon_id == salon_id, CashClosure.day < day
+    ).sort("-day").first_or_none()
+    return round(previous.closing_float, 2) if previous else 0.0
+
+
+async def treasury(salon_id: PydanticObjectId, day: date) -> dict:
+    """État du tiroir pour une journée : ce qui doit s'y trouver, et pourquoi.
+
+    Espèces et banque sont tenues séparément : une carte bancaire ne remplit
+    pas le tiroir, et les confondre est la première cause d'écart inexpliqué à
+    la clôture.
+    """
+    start, end = local_day_bounds(day)
+
+    txs = await Transaction.find(
+        Transaction.salon_id == salon_id,
+        Transaction.paid_at >= start,
+        Transaction.paid_at < end,
+    ).to_list()
+
+    # Le client règle la prestation ET le pourboire : les deux entrent dans le
+    # tiroir. La part du coiffeur y dort jusqu'à la paie.
+    def encaisse(t: Transaction) -> float:
+        return t.amount + t.tip + getattr(t, "salon_tip", 0.0)
+
+    cash_in = round(
+        sum(encaisse(t) for t in txs if t.method == PaymentMethod.CASH), 2
+    )
+    card_total = round(
+        sum(encaisse(t) for t in txs if t.method == PaymentMethod.CARD), 2
+    )
+    online_total = round(
+        sum(encaisse(t) for t in txs if t.method == PaymentMethod.ONLINE), 2
+    )
+
+    expenses = await Expense.find(
+        Expense.salon_id == salon_id, Expense.spent_at >= start, Expense.spent_at < end
+    ).to_list()
+    cash_expenses = round(
+        sum(e.amount for e in expenses if e.paid_from == PaymentSource.CASH), 2
+    )
+    bank_expenses = round(
+        sum(e.amount for e in expenses if e.paid_from == PaymentSource.BANK), 2
+    )
+
+    # Une tséb9a sort du tiroir le jour où elle est accordée, pas le jour où
+    # elle est demandée.
+    advances = await Advance.find(
+        Advance.salon_id == salon_id,
+        Advance.status != AdvanceStatus.PENDING,
+        Advance.status != AdvanceStatus.REJECTED,
+        Advance.decided_at >= start,
+        Advance.decided_at < end,
+    ).to_list()
+    cash_advances = round(
+        sum(a.amount for a in advances if a.paid_from == PaymentSource.CASH), 2
+    )
+
+    movements = await CashMovement.find(
+        CashMovement.salon_id == salon_id, CashMovement.day == day
+    ).sort("created_at").to_list()
+    deposits = round(
+        sum(m.amount for m in movements if m.type == CashMovementType.DEPOSIT), 2
+    )
+    withdrawals = round(
+        sum(m.amount for m in movements if m.type == CashMovementType.WITHDRAWAL), 2
+    )
+
+    ouverture = await opening_float(salon_id, day)
+    attendu = drawer_balance(
+        ouverture, cash_in, deposits, cash_expenses, cash_advances, withdrawals
+    )
+
+    closure = await CashClosure.find_one(
+        CashClosure.salon_id == salon_id, CashClosure.day == day
+    )
+
+    return {
+        "day": day.isoformat(),
+        "opening_float": ouverture,
+        "cash_in": cash_in,
+        "deposits": deposits,
+        "cash_expenses": cash_expenses,
+        "cash_advances": cash_advances,
+        "withdrawals": withdrawals,
+        "expected_cash": attendu,
+        # Côté banque : ce que le TPE et le PSP doivent verser, moins ce qui a
+        # été réglé par virement. Ne touche jamais le tiroir.
+        "card_total": card_total,
+        "online_total": online_total,
+        "bank_expenses": bank_expenses,
+        "bank_total": round(card_total + online_total - bank_expenses, 2),
+        "movements": [
+            {
+                "id": str(m.id),
+                "type": m.type,
+                "amount": round(m.amount, 2),
+                "label": m.label,
+                "created_at": m.created_at,
+            }
+            for m in movements
+        ],
+        "closed": closure is not None,
+        "counted_cash": closure.counted_cash if closure else None,
+        "cash_variance": closure.cash_variance if closure else 0.0,
+        "variance_reason": closure.variance_reason if closure else "",
+        "closing_float": closure.closing_float if closure else 0.0,
+    }
+
+
+async def close_day(
+    salon: Salon,
+    day: date,
+    actor: User,
+    counted_cash: float | None = None,
+    withdrawal: float = 0.0,
+    variance_reason: str = "",
+) -> CashClosure:
+    """Clôture : agrège, déduit les tséb9as, verrouille les transactions (§5.4).
+
+    Le comptage du tiroir est facultatif : beaucoup de gérants ferment sans
+    compter, et un `counted_cash` inventé afficherait un écart nul mensonger.
+    Quand le comptage a lieu, c'est lui qui fait foi — l'écart est enregistré
+    tel quel plutôt que corrigé en silence, et c'est le montant compté, non le
+    théorique, qui devient le fond de caisse du lendemain.
+    """
     if await CashClosure.find_one(CashClosure.salon_id == salon.id, CashClosure.day == day):
         raise HTTPException(status.HTTP_409_CONFLICT, f"La journée du {day} est déjà clôturée")
 
@@ -173,6 +339,23 @@ async def close_day(salon: Salon, day: date, actor: User) -> CashClosure:
         row["net_payout"] = round(row["staff_share"] + row["tips"] - deducted, 2)
 
     advances_total = round(sum(a.amount for a in advances), 2)
+
+    tresor = await treasury(salon.id, day)
+    attendu = tresor["expected_cash"]
+    reel = round(counted_cash, 2) if counted_cash is not None else None
+    ecart = round(reel - attendu, 2) if reel is not None else 0.0
+
+    # Le fond de caisse du lendemain, c'est ce qui reste réellement dans le
+    # tiroir une fois le prélèvement du soir retiré.
+    en_caisse = reel if reel is not None else attendu
+    withdrawal = round(max(withdrawal, 0.0), 2)
+    if withdrawal > en_caisse:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Prélèvement de {withdrawal:.2f} DT impossible : "
+            f"la caisse ne contient que {en_caisse:.2f} DT",
+        )
+
     closure = CashClosure(
         salon_id=salon.id,
         day=day,
@@ -186,6 +369,14 @@ async def close_day(salon: Salon, day: date, actor: User) -> CashClosure:
         by_method=summary["by_method"],
         by_staff=await _decorate_staff_names(by_staff),
         transaction_count=summary["transaction_count"],
+        opening_float=tresor["opening_float"],
+        expected_cash=attendu,
+        counted_cash=reel,
+        cash_variance=ecart,
+        variance_reason=variance_reason.strip(),
+        withdrawal=withdrawal,
+        closing_float=round(en_caisse - withdrawal, 2),
+        bank_total=tresor["bank_total"],
         created_by=actor.id,
     )
     try:

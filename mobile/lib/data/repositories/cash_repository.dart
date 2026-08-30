@@ -41,10 +41,14 @@ class CashRepository {
     required String label,
     required double amount,
     String category = 'autre',
+    String paidFrom = 'cash',
   }) =>
-      _api.post('/cash/expenses',
-          query: {'salon_id': salonId},
-          body: {'label': label, 'amount': amount, 'category': category});
+      _api.post('/cash/expenses', query: {'salon_id': salonId}, body: {
+        'label': label,
+        'amount': amount,
+        'category': category,
+        'paid_from': paidFrom,
+      });
 
   /// Compte de résultat du salon (§3.4).
   ///
@@ -156,10 +160,22 @@ class CashRepository {
       _api.delete('/cash/expenses/$expenseId');
 
   /// Clôture la journée : verrouille les transactions et génère le rapport.
-  Future<ClosureResult> closeDay(String salonId, {String? isoDate}) async {
+  ///
+  /// [countedCash] reste facultatif — un gérant qui n'a pas compté son tiroir
+  /// doit pouvoir fermer sa journée sans qu'on lui invente un écart de zéro.
+  Future<ClosureResult> closeDay(
+    String salonId, {
+    String? isoDate,
+    double? countedCash,
+    double withdrawal = 0,
+    String varianceReason = '',
+  }) async {
     final data = await _api.post('/cash/closures', body: {
       'salon_id': salonId,
       if (isoDate != null) 'day': isoDate,
+      if (countedCash != null) 'counted_cash': countedCash,
+      if (withdrawal > 0) 'withdrawal': withdrawal,
+      if (varianceReason.isNotEmpty) 'variance_reason': varianceReason,
     }) as Map<String, dynamic>;
 
     return ClosureResult(
@@ -170,8 +186,40 @@ class CashRepository {
       staffTotal: (data['staff_total'] as num?)?.toDouble() ?? 0,
       advancesDeducted: (data['advances_deducted'] as num?)?.toDouble() ?? 0,
       netSalon: (data['net_salon'] as num?)?.toDouble() ?? 0,
+      countedCash: (data['counted_cash'] as num?)?.toDouble(),
+      cashVariance: (data['cash_variance'] as num?)?.toDouble() ?? 0,
+      closingFloat: (data['closing_float'] as num?)?.toDouble() ?? 0,
     );
   }
+
+  // -- Trésorerie ---------------------------------------------------------
+  /// État du tiroir : ce qu'il devrait contenir, ligne par ligne.
+  Future<Treasury> treasury(String salonId, {String? isoDate}) async {
+    final data = await _api.get('/cash/treasury', query: {
+      'salon_id': salonId,
+      if (isoDate != null) 'day': isoDate,
+    }) as Map<String, dynamic>;
+    return Treasury.fromJson(data);
+  }
+
+  /// Fond de caisse, apport ou prélèvement — [type] donne le sens.
+  Future<void> addMovement({
+    required String salonId,
+    required String type,
+    required double amount,
+    String label = '',
+    String? isoDate,
+  }) =>
+      _api.post('/cash/movements', body: {
+        'salon_id': salonId,
+        'type': type,
+        'amount': amount,
+        if (label.isNotEmpty) 'label': label,
+        if (isoDate != null) 'day': isoDate,
+      });
+
+  Future<void> removeMovement(String movementId) =>
+      _api.delete('/cash/movements/$movementId');
 
   Future<List<ClosureResult>> closures(String salonId, {int limit = 14}) async {
     final data = await _api
@@ -253,6 +301,11 @@ class ClosureResult {
   final double advancesDeducted;
   final double netSalon;
 
+  /// Null quand personne n'a compté le tiroir : on ne prétend pas à un écart nul.
+  final double? countedCash;
+  final double cashVariance;
+  final double closingFloat;
+
   const ClosureResult({
     required this.id,
     this.day = '',
@@ -261,6 +314,9 @@ class ClosureResult {
     this.staffTotal = 0,
     this.advancesDeducted = 0,
     this.netSalon = 0,
+    this.countedCash,
+    this.cashVariance = 0,
+    this.closingFloat = 0,
   });
 
   factory ClosureResult.fromJson(Map<String, dynamic> json) => ClosureResult(
@@ -271,6 +327,109 @@ class ClosureResult {
         staffTotal: (json['staff_total'] as num?)?.toDouble() ?? 0,
         advancesDeducted: (json['advances_deducted'] as num?)?.toDouble() ?? 0,
         netSalon: (json['net_salon'] as num?)?.toDouble() ?? 0,
+        countedCash: (json['counted_cash'] as num?)?.toDouble(),
+        cashVariance: (json['cash_variance'] as num?)?.toDouble() ?? 0,
+        closingFloat: (json['closing_float'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+
+/// Un mouvement d'espèces sans prestation : fond, apport ou prélèvement.
+class CashMovement {
+  const CashMovement({
+    required this.id,
+    required this.type,
+    required this.amount,
+    this.label = '',
+  });
+
+  final String id;
+  final String type;
+  final double amount;
+  final String label;
+
+  /// Vrai quand le mouvement remplit le tiroir plutôt qu'il ne le vide.
+  bool get isIncoming => type != 'withdrawal';
+
+  factory CashMovement.fromJson(Map<String, dynamic> json) => CashMovement(
+        id: json['id']?.toString() ?? '',
+        type: json['type']?.toString() ?? 'deposit',
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        label: json['label']?.toString() ?? '',
+      );
+}
+
+
+/// État du tiroir un jour donné (§3.4).
+///
+/// Espèces et banque sont tenues séparément : une carte bancaire ne remplit
+/// jamais le tiroir, et les confondre est la première cause d'écart
+/// inexpliqué au moment de compter.
+class Treasury {
+  const Treasury({
+    this.day = '',
+    this.openingFloat = 0,
+    this.cashIn = 0,
+    this.deposits = 0,
+    this.cashExpenses = 0,
+    this.cashAdvances = 0,
+    this.withdrawals = 0,
+    this.expectedCash = 0,
+    this.cardTotal = 0,
+    this.onlineTotal = 0,
+    this.bankExpenses = 0,
+    this.bankTotal = 0,
+    this.movements = const [],
+    this.closed = false,
+    this.countedCash,
+    this.cashVariance = 0,
+    this.varianceReason = '',
+    this.closingFloat = 0,
+  });
+
+  final String day;
+  final double openingFloat;
+  final double cashIn;
+  final double deposits;
+  final double cashExpenses;
+  final double cashAdvances;
+  final double withdrawals;
+  final double expectedCash;
+  final double cardTotal;
+  final double onlineTotal;
+  final double bankExpenses;
+  final double bankTotal;
+  final List<CashMovement> movements;
+  final bool closed;
+  final double? countedCash;
+  final double cashVariance;
+  final String varianceReason;
+  final double closingFloat;
+
+  /// Un écart n'existe que si quelqu'un a compté.
+  bool get hasVariance => countedCash != null && cashVariance.abs() >= 0.01;
+
+  factory Treasury.fromJson(Map<String, dynamic> json) => Treasury(
+        day: json['day']?.toString() ?? '',
+        openingFloat: (json['opening_float'] as num?)?.toDouble() ?? 0,
+        cashIn: (json['cash_in'] as num?)?.toDouble() ?? 0,
+        deposits: (json['deposits'] as num?)?.toDouble() ?? 0,
+        cashExpenses: (json['cash_expenses'] as num?)?.toDouble() ?? 0,
+        cashAdvances: (json['cash_advances'] as num?)?.toDouble() ?? 0,
+        withdrawals: (json['withdrawals'] as num?)?.toDouble() ?? 0,
+        expectedCash: (json['expected_cash'] as num?)?.toDouble() ?? 0,
+        cardTotal: (json['card_total'] as num?)?.toDouble() ?? 0,
+        onlineTotal: (json['online_total'] as num?)?.toDouble() ?? 0,
+        bankExpenses: (json['bank_expenses'] as num?)?.toDouble() ?? 0,
+        bankTotal: (json['bank_total'] as num?)?.toDouble() ?? 0,
+        movements: ((json['movements'] as List?) ?? [])
+            .map((e) => CashMovement.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+        closed: json['closed'] == true,
+        countedCash: (json['counted_cash'] as num?)?.toDouble(),
+        cashVariance: (json['cash_variance'] as num?)?.toDouble() ?? 0,
+        varianceReason: json['variance_reason']?.toString() ?? '',
+        closingFloat: (json['closing_float'] as num?)?.toDouble() ?? 0,
       );
 }
 
