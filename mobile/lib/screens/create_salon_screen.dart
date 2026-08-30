@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
 import '../core/api_exception.dart';
@@ -91,6 +94,75 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
     });
   }
 
+  /// Vitrine choisie avant la création. Le salon n'existe pas encore : on
+  /// garde le fichier et on l'envoie juste après, quand on a son identifiant.
+  File? _vitrine;
+
+  Future<void> _pickVitrine() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      // Réduit avant l'envoi : le serveur refuse au-delà de MAX_UPLOAD_MB, et
+      // une photo de 8 Mo prend une éternité en 3G.
+      maxWidth: 1600,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _vitrine = File(picked.path));
+  }
+
+  /// Aperçu de la vitrine, en tête du formulaire.
+  ///
+  /// C'est la première chose que verra un client dans « قريب منك » : une carte
+  /// sans photo se fait passer sans être lue.
+  Widget _buildVitrine() {
+    return GestureDetector(
+      onTap: _saving ? null : _pickVitrine,
+      child: Container(
+        height: 150,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: _vitrine == null ? AppColors.border : AppColors.gold,
+          ),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: _vitrine == null
+            ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.add_a_photo_outlined,
+                    color: AppColors.gold, size: 26),
+                const SizedBox(height: 8),
+                Text('زيد تصويرة الصالون',
+                    style: AppTextStyle.dmSans(
+                        size: 13, weight: FontWeight.w700)),
+                const SizedBox(height: 3),
+                Text('هي أوّل حاجة يشوفها الحريف',
+                    style:
+                        AppTextStyle.dmSans(size: 11, color: AppColors.sub)),
+              ])
+            : Stack(fit: StackFit.expand, children: [
+                Image.file(_vitrine!, fit: BoxFit.cover),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.55),
+                      borderRadius: BorderRadius.circular(50),
+                    ),
+                    child: Text('بدّل',
+                        style: AppTextStyle.dmSans(
+                            size: 11, color: Colors.white)),
+                  ),
+                ),
+              ]),
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_lat == null || _lng == null) {
@@ -112,6 +184,23 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
             defaultSplitPct: _splitPct,
             cancellationWindowH: _cancelWindowH,
           );
+      if (!mounted) return;
+
+      // La photo part maintenant : le salon a enfin un identifiant. Un échec
+      // ici ne doit pas emporter la création — le salon existe, il lui manque
+      // juste sa vitrine, et le gérant peut l'ajouter depuis la gestion.
+      if (_vitrine != null) {
+        try {
+          await context
+              .read<SalonAdminRepository>()
+              .addPhoto(salon.id, _vitrine!);
+        } on ApiException catch (e) {
+          if (mounted) {
+            showAppSnack(context, 'الصالون تعمل، أما التصويرة ما تبعثتش: '
+                '${e.message}');
+          }
+        }
+      }
       if (!mounted) return;
 
       // Le rôle a changé côté serveur — sans ce rechargement l'app resterait
@@ -214,6 +303,8 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
                     style: AppTextStyle.dmSans(size: 15),
                     decoration: const InputDecoration(hintText: '71 000 000'),
                   ),
+                  const SizedBox(height: 20),
+                  _buildVitrine(),
                   const SizedBox(height: 20),
                   _buildLocation(),
                   _buildMapButton(),

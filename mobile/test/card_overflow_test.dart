@@ -100,6 +100,61 @@ void main() {
       }
     });
 
+    testWidgets('la vitrine occupe toute la largeur de la carte',
+        (tester) async {
+      // Le bloc visuel n'imposait aucune largeur : dans un Column non étiré il
+      // se réduisait à la largeur du monogramme — 96 px au milieu d'une carte
+      // de 240, soit une bande étroite au lieu d'une vitrine.
+      await tester.pumpWidget(const MaterialApp(
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: SalonCard(salon: salon),
+            ),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final vitrine = tester.getSize(find.byWidgetPredicate(
+          (w) => w is SizedBox && w.height == SalonCard.imageHeight));
+      expect(tester.getSize(find.byType(SalonCard)).width, SalonCard.cardWidth);
+      // Moins les 1 px de bordure de chaque côté : la vitrine occupe tout
+      // l'intérieur de la carte.
+      expect(vitrine.width, SalonCard.cardWidth - 2,
+          reason: 'la photo doit couvrir la carte, pas une bande centrale');
+      expect(vitrine.height, SalonCard.imageHeight);
+    });
+
+    testWidgets('un salon sans avis est annoncé neuf, pas mal noté',
+        (tester) async {
+      const neuf = Salon(
+        id: '2',
+        name: 'Xbfbb',
+        type: SalonType.barbershop,
+        rating: 0,
+        reviews: 0,
+        distance: '0.2 km',
+      );
+      await tester.pumpWidget(const MaterialApp(
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            body: Align(
+                alignment: Alignment.topCenter, child: SalonCard(salon: neuf)),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      // « 0.0 ★ » se lit comme une mauvaise note alors que le salon vient
+      // d'ouvrir : personne ne cliquerait.
+      expect(find.text('جديد'), findsOneWidget);
+      expect(find.text('0.0'), findsNothing);
+    });
+
     testWidgets('la réserve ne devient pas absurde pour autant', (tester) async {
       final given = await reserved(tester, SalonCard.heightIn);
       // Une réserve trop généreuse laisserait une bande vide en bas de chaque

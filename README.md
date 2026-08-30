@@ -297,6 +297,28 @@ ne s'y ajoute, sinon le rapport déjà signé deviendrait faux.
 enregistre fond de caisse, apport et prélèvement. Le solde du tiroir n'est
 jamais visible par l'équipe : c'est une information de gérant.
 
+### La carte « قريب منك » (§3.2)
+
+C'est le premier contact d'un client avec un salon, et longtemps le plus
+maltraité : le bloc visuel n'imposait aucune largeur, donc dans un `Column`
+non étiré il se réduisait à la largeur du monogramme — **96 px au milieu d'une
+carte de 240**, une bande étroite au lieu d'une vitrine.
+
+La vitrine occupe désormais toute la carte, avec un voile dégradé en bas pour
+que le badge et le prix restent lisibles sur une photo claire sans assombrir
+l'image entière. Le prix passe sur la vitrine plutôt que sous le nom : la
+carte gagne une ligne, et le chiffre se voit mieux.
+
+Un salon sans avis affichait **« 0.0 ★ »**, ce qui se lit comme une mauvaise
+note alors qu'il vient d'ouvrir — personne ne cliquerait. Il porte maintenant
+la mention « جديد », et la note n'apparaît qu'à partir du premier avis, avec
+son nombre d'avis.
+
+**La photo se choisit dès la création du salon.** Le salon n'existe pas encore
+au moment du choix : le fichier est gardé, puis envoyé une fois l'identifiant
+obtenu. Un échec d'envoi n'emporte pas la création — le salon existe, il lui
+manque sa vitrine, et le gérant l'ajoute depuis la gestion.
+
 ### Médias : Cloudinary, photos et reels (§3.2, §3.8)
 
 Photos de salon et **reels vidéo** passent par Cloudinary quand ses clés sont

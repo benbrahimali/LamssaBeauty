@@ -500,7 +500,8 @@ class SalonCard extends StatelessWidget {
   const SalonCard({super.key, required this.salon});
 
   /// Hauteur du visuel en tête de carte — la seule partie qui ne bouge pas.
-  static const imageHeight = 130.0;
+  static const imageHeight = 140.0;
+  static const cardWidth = 240.0;
 
   /// Hauteur à réserver dans la liste.
   ///
@@ -508,12 +509,14 @@ class SalonCard extends StatelessWidget {
   /// 15 px, et n'importe quel agrandissement de la police système cassait les
   /// autres. Le bloc texte suit donc le réglage d'accessibilité de l'appareil.
   static double heightIn(BuildContext context) {
-    const padding = 28.0;      // EdgeInsets.all(14), haut et bas
-    // Nom + note + prix. Mesuré à 52 px avec les polices de test ; on réserve
-    // plus, car DM Sans rendu sur l'appareil est plus haut que la police de
-    // substitution des tests — c'est précisément cet écart qui a produit les
-    // 15 px de débordement.
-    const textBlock = 72.0;
+    const padding = 26.0;      // EdgeInsets.fromLTRB(14, 12, 14, 14)
+    // Nom + ligne d'infos — deux lignes depuis que le prix est passé sur la
+    // vitrine. Mesuré à 204 px au total avec les polices de test ; on réserve
+    // un peu plus, car DM Sans rendu sur l'appareil est plus haut que la
+    // police de substitution des tests, et c'est cet écart qui avait produit
+    // les 15 px de débordement. Pas davantage : une réserve trop large
+    // laisserait une bande vide sous chaque carte.
+    const textBlock = 52.0;
     return imageHeight +
         padding +
         MediaQuery.textScalerOf(context).scale(textBlock);
@@ -522,27 +525,71 @@ class SalonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 240,
+      width: cardWidth,
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppColors.border),
       ),
       clipBehavior: Clip.hardEdge,
-      child: Column(children: [
-        Container(
-          height: imageHeight,
+      child: Column(
+        // Sans étirement, le bloc visuel se réduisait à la largeur du
+        // monogramme : une bande étroite au milieu d'une carte vide, au lieu
+        // d'une vitrine pleine largeur.
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildVisual(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(salon.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.dmSans(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: AppColors.text,
+                      )),
+                  const SizedBox(height: 7),
+                  _buildMeta(),
+                ]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// La vitrine : photo si elle existe, monogramme sinon.
+  Widget _buildVisual() {
+    return SizedBox(
+      height: imageHeight,
+      child: Stack(fit: StackFit.expand, children: [
+        DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [salon.color, salon.accent.withValues(alpha: 0.13)],
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
             ),
           ),
-          child: Stack(alignment: Alignment.center, children: [
-            // La photo prime sur les initiales : c'est elle qui fait cliquer.
-            if (salon.photos.isNotEmpty)
-              Positioned.fill(
-                child: CachedNetworkImage(
+          child: salon.photos.isEmpty
+              ? Center(
+                  child: Text(salon.initials,
+                      style: GoogleFonts.playfairDisplay(
+                        fontSize: 46,
+                        fontWeight: FontWeight.w900,
+                        color: salon.accent,
+                        shadows: [
+                          Shadow(
+                              color: salon.accent.withValues(alpha: 0.5),
+                              blurRadius: 20)
+                        ],
+                      )),
+                )
+              // La photo prime sur les initiales : c'est elle qui fait cliquer.
+              : CachedNetworkImage(
                   imageUrl: Env.mediaUrl(salon.photos.first),
                   fit: BoxFit.cover,
                   placeholder: (_, __) => const SizedBox.shrink(),
@@ -550,64 +597,108 @@ class SalonCard extends StatelessWidget {
                   // reste visible, ce qui vaut mieux qu'une icône cassée.
                   errorWidget: (_, __, ___) => const SizedBox.shrink(),
                 ),
-              )
-            else
-              Text(salon.initials, style: GoogleFonts.playfairDisplay(
-                fontSize: 48, fontWeight: FontWeight.w900, color: salon.accent,
-                shadows: [Shadow(color: salon.accent.withValues(alpha: 0.5), blurRadius: 20)],
-              )),
-            Positioned(
-              top: 10, right: 10,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: salon.open
-                      ? AppColors.green.withValues(alpha: 0.85)
-                      : AppColors.red.withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(50),
-                ),
-                child: Text(
-                  salon.open ? '🟢 مفتوح' : '🔴 مغلق',
-                  style: GoogleFonts.dmSans(fontSize: 10, color: Colors.white),
-                ),
+        ),
+        // Voile bas : le badge et le prix restent lisibles sur une photo
+        // claire, sans assombrir la vitrine entière.
+        const Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 56,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [Color(0xCC000000), Color(0x00000000)],
               ),
             ),
-          ]),
+          ),
         ),
-        Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(salon.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.dmSans(
-                  fontWeight: FontWeight.w700, fontSize: 15, color: AppColors.text,
-                )),
-            const SizedBox(height: 6),
-            Row(children: [
-              const Icon(Icons.star_rounded, size: 13, color: AppColors.gold),
-              const SizedBox(width: 4),
-              Text(salon.rating.toStringAsFixed(1),
-                  style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.sub)),
-              if (salon.distance.isNotEmpty) ...[
-                const SizedBox(width: 10),
-                const Icon(Icons.location_on_rounded, size: 12, color: AppColors.sub),
-                const SizedBox(width: 2),
-                Text(salon.distance,
-                    style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.sub)),
-              ],
-            ]),
-            if (salon.price.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(salon.price,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.sub)),
-            ],
-          ]),
-        ),
+        Positioned(top: 10, right: 10, child: _buildStatus()),
+        if (salon.price.isNotEmpty)
+          Positioned(bottom: 10, right: 10, child: _buildPrice()),
       ]),
     );
+  }
+
+  Widget _buildStatus() {
+    final ouvert = salon.open;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: ouvert
+            ? AppColors.green.withValues(alpha: 0.9)
+            : AppColors.red.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(50),
+      ),
+      child: Text(ouvert ? 'مفتوح' : 'مغلق',
+          style: GoogleFonts.dmSans(
+              fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
+    );
+  }
+
+  Widget _buildPrice() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.gold,
+        borderRadius: BorderRadius.circular(50),
+      ),
+      child: Text(salon.price,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.dmSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Colors.black)),
+    );
+  }
+
+  /// Note et distance, sur une seule ligne.
+  Widget _buildMeta() {
+    return Row(children: [
+      // Un salon sans avis affichait « 0.0 ★ », ce qui se lit comme une
+      // mauvaise note alors qu'il vient d'ouvrir.
+      if (salon.reviews == 0)
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: AppColors.gold.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text('جديد',
+              style: GoogleFonts.dmSans(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.gold)),
+        )
+      else ...[
+        const Icon(Icons.star_rounded, size: 14, color: AppColors.gold),
+        const SizedBox(width: 3),
+        Text(salon.rating.toStringAsFixed(1),
+            style: GoogleFonts.dmSans(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.text)),
+        const SizedBox(width: 3),
+        Text('(${salon.reviews})',
+            style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.sub)),
+      ],
+      if (salon.distance.isNotEmpty) ...[
+        const SizedBox(width: 10),
+        const Icon(Icons.location_on_rounded, size: 13, color: AppColors.sub),
+        const SizedBox(width: 2),
+        // Le nom prend la place, la distance cède : elle reste lisible même
+        // tronquée, un nom coupé au milieu ne l'est pas.
+        Flexible(
+          child: Text(salon.distance,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.sub)),
+        ),
+      ],
+    ]);
   }
 }
 
