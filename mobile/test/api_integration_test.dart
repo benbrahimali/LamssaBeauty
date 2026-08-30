@@ -1173,6 +1173,62 @@ void main() {
           reason: 'ouvrir n’est pas irréversible');
     });
 
+    test('changer les heures déplace vraiment les créneaux', () async {
+      restaurer();
+      final jours = await salons.availability(staffId: staffId);
+      final ouvert = jours.firstWhere((j) => j.available);
+      final cle = _cleJour(DateTime.parse(ouvert.isoDate));
+
+      await admin.updateSalon(salonId, hours: {
+        cle: const DayHours(closed: false, open: '14:00', close: '18:00'),
+      });
+
+      final creneaux =
+          await salons.slots(staffId: staffId, isoDate: ouvert.isoDate);
+      expect(creneaux, isNotEmpty,
+          reason: 'quatre heures d’ouverture laissent de la place');
+
+      // Le serveur raisonne en heure de Tunis : on compare sur l'heure locale
+      // rendue par le modèle, pas sur l'UTC brut.
+      for (final c in creneaux) {
+        final h = DateTime.parse(c.start).toLocal();
+        expect(h.hour, greaterThanOrEqualTo(14),
+            reason: 'aucun créneau avant l’ouverture déclarée');
+        expect(h.hour, lessThan(18),
+            reason: 'aucun créneau après la fermeture déclarée');
+      }
+    });
+
+    test('une pause déjeuner vide sa tranche', () async {
+      restaurer();
+      final jours = await salons.availability(staffId: staffId);
+      final ouvert = jours.firstWhere((j) => j.available);
+      final cle = _cleJour(DateTime.parse(ouvert.isoDate));
+
+      await admin.updateSalon(salonId, hours: {
+        cle: const DayHours(
+          closed: false,
+          open: '09:00',
+          close: '19:00',
+          breakStart: '12:30',
+          breakEnd: '14:00',
+        ),
+      });
+
+      final creneaux =
+          await salons.slots(staffId: staffId, isoDate: ouvert.isoDate);
+      final pendantLaPause = creneaux.where((c) {
+        final h = DateTime.parse(c.start).toLocal();
+        final minutes = h.hour * 60 + h.minute;
+        return minutes >= 12 * 60 + 30 && minutes < 14 * 60;
+      });
+
+      // Un coiffeur qui déjeune n'est pas réservable : proposer le créneau
+      // ferait venir un client devant une chaise vide.
+      expect(pendantLaPause, isEmpty);
+      expect(creneaux, isNotEmpty, reason: 'le reste de la journée tient');
+    });
+
     test('un salon 7j/7 est légitime', () async {
       restaurer();
       await admin.updateSalon(salonId, hours: {

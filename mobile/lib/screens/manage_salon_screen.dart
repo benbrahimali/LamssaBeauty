@@ -479,8 +479,7 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
                 Switch(
                   value: !h.closed,
                   activeThumbColor: AppColors.gold,
-                  onChanged: (ouvert) =>
-                      _saveDayHours(jour.key, h.copyWith(closed: !ouvert)),
+                  onChanged: (ouvert) => _basculerJour(jour.key, h, ouvert),
                 ),
               ]),
             ),
@@ -488,6 +487,16 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
         }),
       ],
     );
+  }
+
+  /// Ouvre ou ferme un jour.
+  ///
+  /// À l'ouverture, l'éditeur enchaîne : sans cela le jour serait enregistré
+  /// aux heures par défaut, et un gérant qui s'arrête là déclarerait
+  /// 09:00–19:00 sans l'avoir voulu.
+  Future<void> _basculerJour(String cle, DayHours actuel, bool ouvert) async {
+    await _saveDayHours(cle, actuel.copyWith(closed: !ouvert));
+    if (ouvert && mounted) await _editDayHours(cle, _hours[cle] ?? actuel);
   }
 
   /// Édite les heures d'un jour ouvert.
