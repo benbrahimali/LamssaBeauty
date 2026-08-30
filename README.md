@@ -404,6 +404,14 @@ résoudre un salon depuis son seul identifiant (c'est tout ce que porte un
 reel), et le lecteur **le dit** quand il ne peut pas ouvrir l'auteur plutôt que
 de ne rien faire.
 
+Cela ne suffisait pas : le lecteur est une route posée **au-dessus** de la
+coquille. Les callbacks changeaient bien l'écran de la coquille, mais elle
+restait cachée sous le lecteur — le bouton agissait sans que rien ne se voie.
+Il referme donc le lecteur avant de naviguer. Sa cible tactile, réduite à la
+largeur du mot « احجز », passe par ailleurs à 56 px : sous le minimum du
+doigt, le tap tombait à côté et le bouton paraissait mort pour une seconde
+raison.
+
 ### Médias : Cloudinary, photos et reels (§3.2, §3.8)
 
 Photos de salon et **reels vidéo** passent par Cloudinary quand ses clés sont

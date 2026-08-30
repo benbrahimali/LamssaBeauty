@@ -126,20 +126,31 @@ class _ReelsScreenState extends State<ReelsScreen> {
 
   /// Ouvre l'auteur du reel — le coiffeur s'il y en a un, le salon sinon.
   ///
-  /// Le bouton « احجز » dépendait entièrement de callbacks facultatifs : un
-  /// hôte qui les oubliait laissait un bouton parfaitement inerte, sans le
-  /// moindre signe. On le dit plutôt que de ne rien faire.
+  /// Le lecteur est une route posée AU-DESSUS de la coquille de l'app. Les
+  /// callbacks changent bien l'écran de la coquille, mais elle reste cachée
+  /// dessous : le bouton semblait mort alors qu'il agissait. On referme donc
+  /// le lecteur d'abord, et on navigue ensuite.
+  ///
+  /// Le repli existe pour l'autre cas : un hôte qui n'aurait fourni aucun
+  /// chemin laisserait un bouton inerte sans le moindre signe. On le dit.
   void _openAuthor(Reel reel) {
     final staffId = reel.staffId;
-    if (staffId != null && widget.onGoStaff != null) {
-      widget.onGoStaff!(staffId);
+    final versCoiffeur = staffId != null ? widget.onGoStaff : null;
+    final versSalon = widget.onGoSalon;
+
+    if (versCoiffeur == null && versSalon == null) {
+      showAppSnack(context, 'ما نجّمناش نحلّو الصالون من هنا');
       return;
     }
-    if (widget.onGoSalon != null) {
-      widget.onGoSalon!(reel.salonId);
-      return;
+
+    final navigateur = Navigator.of(context);
+    if (navigateur.canPop()) navigateur.pop();
+
+    if (versCoiffeur != null && staffId != null) {
+      versCoiffeur(staffId);
+    } else {
+      versSalon!(reel.salonId);
     }
-    showAppSnack(context, 'ما نجّمناش نحلّو الصالون من هنا');
   }
 
   Future<void> _pickAndPublish() async {
@@ -357,11 +368,19 @@ class _Action extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Column(children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(height: 4),
-        Text(label, style: AppTextStyle.dmSans(size: 11, color: Colors.white)),
-      ]),
+      // La colonne se réduisait à la largeur de son texte : une cible d'une
+      // trentaine de pixels, sous le minimum tactile. Un doigt qui vise
+      // l'icône tombait à côté, et le bouton passait pour inerte.
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 56, minHeight: 56),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        alignment: Alignment.center,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 4),
+          Text(label, style: AppTextStyle.dmSans(size: 11, color: Colors.white)),
+        ]),
+      ),
     );
   }
 }

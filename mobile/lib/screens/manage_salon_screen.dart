@@ -319,7 +319,10 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      floatingActionButton: _loading || _error != null
+      // Pas de bouton « + » sur les horaires : les sept jours existent déjà,
+      // on les modifie, on n'en ajoute aucun. Le laisser affiché masquait en
+      // prime la dernière ligne de la liste.
+      floatingActionButton: _loading || _error != null || _tab == 3
           ? null
           : FloatingActionButton(
               backgroundColor: AppColors.gold,
@@ -328,8 +331,7 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
                   : () => switch (_tab) {
                         0 => _editService(),
                         1 => _editStaff(),
-                        2 => _addPhoto(),
-                        _ => null,
+                        _ => _addPhoto(),
                       },
               child: _uploading
                   ? const SizedBox(

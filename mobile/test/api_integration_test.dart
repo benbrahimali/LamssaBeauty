@@ -597,16 +597,26 @@ void main() {
     test('la caisse du jour se décompose correctement', () async {
       final day = await cash.today(salonId);
 
-      expect(day.total, greaterThan(0), reason: 'le seed encaisse la journée');
+      // L'invariant vaut journée pleine comme journée vide. L'exiger positif
+      // faisait échouer la suite le lendemain du seed, qui place son activité
+      // « aujourd'hui » : le test mesurait la fraîcheur du jeu de données au
+      // lieu de la règle.
       expect(
         (day.salonTotal + day.staffTotal - day.total).abs(),
         lessThan(0.02),
         reason: 'part salon + part équipe doit reconstituer le total',
       );
-      expect(day.workers, isNotEmpty);
-      expect(day.workers.first.name, isNot('—'), reason: 'le nom doit être résolu');
       expect(day.byMethod.values.fold<double>(0, (a, b) => a + b),
-          closeTo(day.total, 0.02));
+          closeTo(day.total, 0.02),
+          reason: 'la ventilation par mode doit reconstituer le total');
+
+      if (day.transactionCount == 0) return;
+
+      expect(day.total, greaterThan(0),
+          reason: 'des transactions encaissées font un total');
+      expect(day.workers, isNotEmpty);
+      expect(day.workers.first.name, isNot('—'),
+          reason: 'le nom doit être résolu côté serveur');
     });
 
     test('les tséb9as en attente remontent avec le nom du demandeur', () async {
@@ -856,8 +866,10 @@ void main() {
     test('le tiroir se décompose ligne par ligne', () async {
       final t = await cash.treasury(salonId);
 
-      expect(t.openingFloat, greaterThan(0),
-          reason: 'le seed ouvre la journée avec de la monnaie');
+      // Le fond de caisse du jour vient du seed ou de la clôture de la veille :
+      // exiger qu'il soit positif revenait à exiger un seed du jour même.
+      // L'arithmétique, elle, doit tenir quoi qu'il arrive.
+      expect(t.openingFloat, greaterThanOrEqualTo(0));
       expect(
         t.expectedCash,
         closeTo(
