@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../widgets/async_states.dart';
@@ -10,6 +11,51 @@ import '../widgets/async_states.dart';
 /// légèrement différents, et c'est justement ici que les écarts se paient :
 /// l'utilisateur ne sait jamais pourquoi ça ne marche pas.
 ///
+/// Adresse lue à partir de coordonnées.
+///
+/// Rue et ville sont séparées, parce que le formulaire de création les demande
+/// séparément. Les fondre en une seule chaîne laissait le champ « ville » vide
+/// et l'adresse redondante — « Av. Habib Bourguiba, Tunis » dans un champ, rien
+/// dans l'autre.
+class PostalAddress {
+  const PostalAddress({this.street = '', this.city = ''});
+
+  /// Rue et quartier, sans la ville.
+  final String street;
+  final String city;
+
+  bool get isEmpty => street.isEmpty && city.isEmpty;
+
+  /// Rendu d'un seul tenant, pour les écrans qui n'ont qu'une ligne.
+  String get full =>
+      [street, city].where((p) => p.isNotEmpty).join(', ');
+}
+
+/// Traduit des coordonnées en adresse.
+///
+/// Renvoie une adresse vide plutôt qu'une erreur : un géocodeur muet ne doit
+/// pas empêcher de créer un salon, le gérant saisira à la main.
+Future<PostalAddress> resolveAddress(double lat, double lng) async {
+  try {
+    final lieux = await placemarkFromCoordinates(lat, lng);
+    if (lieux.isEmpty) return const PostalAddress();
+    final lieu = lieux.first;
+
+    return PostalAddress(
+      street: [lieu.street, lieu.subLocality]
+          .where((p) => p != null && p.isNotEmpty)
+          .join(', '),
+      // `locality` est la ville ; à défaut la gouvernorat, qui vaut mieux que
+      // rien pour retrouver un salon.
+      city: (lieu.locality?.isNotEmpty ?? false)
+          ? lieu.locality!
+          : (lieu.administrativeArea ?? ''),
+    );
+  } catch (_) {
+    return const PostalAddress();
+  }
+}
+
 /// Position obtenue, et ce qu'elle vaut.
 class ResolvedPosition {
   const ResolvedPosition(this.position, {this.approximate = false});

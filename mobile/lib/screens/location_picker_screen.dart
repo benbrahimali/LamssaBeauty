@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../core/location.dart';
@@ -50,18 +49,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   Future<void> _resolveAddress() async {
     setState(() => _resolving = true);
     try {
-      final lieux = await placemarkFromCoordinates(
-        _target.latitude,
-        _target.longitude,
-      );
+      // Même géocodeur que la création : deux rendus différents pour le même
+      // point donneraient l'impression que l'un des deux se trompe.
+      final adresse =
+          await resolveAddress(_target.latitude, _target.longitude);
       if (!mounted) return;
-      final lieu = lieux.isEmpty ? null : lieux.first;
       setState(() {
-        _address = lieu == null
-            ? ''
-            : [lieu.street, lieu.subLocality, lieu.locality]
-                .where((p) => p != null && p.isNotEmpty)
-                .join(', ');
+        _address = adresse.full;
         _resolving = false;
       });
     } catch (_) {

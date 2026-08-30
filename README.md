@@ -297,6 +297,24 @@ ne s'y ajoute, sinon le rapport déjà signé deviendrait faux.
 enregistre fond de caisse, apport et prélèvement. Le solde du tiroir n'est
 jamais visible par l'équipe : c'est une information de gérant.
 
+### Ville et adresse remplies depuis la position (§3.1)
+
+« موقعي الحالي » ne posait que des coordonnées : ville et adresse restaient
+vides et le gérant retapait ce que le téléphone savait déjà. Le sélecteur de
+carte, lui, faisait un géocodage inverse mais fondait tout en une seule
+chaîne — « Av. Habib Bourguiba, Menzah, Tunis » dans le champ adresse, et rien
+dans le champ ville.
+
+Un seul géocodeur sert maintenant les deux chemins, et il rend **la rue et la
+ville séparément**, comme le formulaire les demande. Deux rendus différents
+pour le même point donneraient l'impression que l'un des deux se trompe.
+
+La règle est de **compléter, jamais d'écraser** : seuls les champs laissés
+vides sont remplis. Le gérant connaît son quartier mieux qu'un géocodeur —
+« Menzah 6 » vaut mieux que « Ariana » même quand le géocodeur préfère le
+second. Et un géocodeur muet n'empêche pas de créer un salon : l'adresse
+revient vide, le gérant saisit à la main.
+
 ### Position du salon : fraîche plutôt que précise (§3.1)
 
 Un point GPS met parfois plus de quinze secondes à venir en intérieur — et

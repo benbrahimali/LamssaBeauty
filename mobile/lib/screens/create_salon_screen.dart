@@ -73,9 +73,31 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
         showAppSnack(context,
             'الموقع تقريبي — ثبّتو في الخريطة باش الحرفاء يلقاوك بالضبط');
       }
+
+      await _remplirAdresse(
+          position.position.latitude, position.position.longitude);
     } finally {
       if (mounted) setState(() => _locating = false);
     }
+  }
+
+  /// Complète ville et adresse à partir des coordonnées.
+  ///
+  /// Seuls les champs laissés vides sont remplis : le gérant connaît son
+  /// quartier mieux qu'un géocodeur inverse, et écraser sa saisie serait pire
+  /// que de ne rien proposer.
+  Future<void> _remplirAdresse(double lat, double lng) async {
+    final adresse = await resolveAddress(lat, lng);
+    if (!mounted || adresse.isEmpty) return;
+
+    setState(() {
+      if (adresse.street.isNotEmpty && _addressCtrl.text.trim().isEmpty) {
+        _addressCtrl.text = adresse.street;
+      }
+      if (adresse.city.isNotEmpty && _cityCtrl.text.trim().isEmpty) {
+        _cityCtrl.text = adresse.city;
+      }
+    });
   }
 
   /// Ajuste la position sur la carte.
@@ -98,12 +120,10 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
       // Posé à la main sur la carte : ce n'est plus une approximation, c'est
       // exactement là que le gérant veut son salon.
       _approximatif = false;
-      // L'adresse lue sur la carte ne remplace pas ce que le gérant a saisi :
-      // il connaît son quartier mieux qu'un géocodeur inverse.
-      if (choisi.address.isNotEmpty && _addressCtrl.text.trim().isEmpty) {
-        _addressCtrl.text = choisi.address;
-      }
     });
+    // Même chemin que « موقعي الحالي » : ville et adresse séparées, et rien
+    // n'écrase une saisie existante.
+    await _remplirAdresse(choisi.lat, choisi.lng);
   }
 
   /// Vitrine choisie avant la création. Le salon n'existe pas encore : on
