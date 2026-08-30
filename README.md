@@ -297,6 +297,27 @@ ne s'y ajoute, sinon le rapport déjà signé deviendrait faux.
 enregistre fond de caisse, apport et prélèvement. Le solde du tiroir n'est
 jamais visible par l'équipe : c'est une information de gérant.
 
+### Position du salon : fraîche plutôt que précise (§3.1)
+
+Un point GPS met parfois plus de quinze secondes à venir en intérieur — et
+c'est justement là que se tient un gérant qui crée son salon. L'app se
+rabattait alors **en silence** sur la dernière position connue de l'appareil,
+qui peut dater d'hier et d'un autre quartier.
+
+Passable pour trier des salons par distance ; inacceptable pour figer
+l'adresse d'un salon, que le gérant n'aurait aucun moyen de vérifier sur des
+coordonnées brutes. La chaîne dégrade donc par étapes, en préférant toujours
+une mesure **fraîche** à une mesure précise mais périmée :
+
+```
+haute précision (12 s)  →  précision moyenne (6 s)  →  dernier point connu
+```
+
+Un point à cent mètres près obtenu maintenant vaut mieux que la position
+d'hier. Et quand le repli est atteint, il est **signalé** : la création
+affiche « الموقع تقريبي », garde le liseré doré au lieu du vert, et invite à
+poser le point sur la carte — où il redevient exact.
+
 ### La carte « قريب منك » (§3.2)
 
 C'est le premier contact d'un client avec un salon, et longtemps le plus

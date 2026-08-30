@@ -61,9 +61,18 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
       final position = await resolvePosition(context);
       if (!mounted || position == null) return;
       setState(() {
-        _lat = position.latitude;
-        _lng = position.longitude;
+        _lat = position.position.latitude;
+        _lng = position.position.longitude;
+        _approximatif = position.approximate;
       });
+
+      // Un point périmé figerait le salon au mauvais endroit, et le gérant
+      // n'aurait que des coordonnées illisibles pour s'en apercevoir. On le
+      // dit, et on l'envoie vers la carte pour ajuster.
+      if (position.approximate && mounted) {
+        showAppSnack(context,
+            'الموقع تقريبي — ثبّتو في الخريطة باش الحرفاء يلقاوك بالضبط');
+      }
     } finally {
       if (mounted) setState(() => _locating = false);
     }
@@ -86,6 +95,9 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
     setState(() {
       _lat = choisi.lat;
       _lng = choisi.lng;
+      // Posé à la main sur la carte : ce n'est plus une approximation, c'est
+      // exactement là que le gérant veut son salon.
+      _approximatif = false;
       // L'adresse lue sur la carte ne remplace pas ce que le gérant a saisi :
       // il connaît son quartier mieux qu'un géocodeur inverse.
       if (choisi.address.isNotEmpty && _addressCtrl.text.trim().isEmpty) {
@@ -97,6 +109,10 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
   /// Vitrine choisie avant la création. Le salon n'existe pas encore : on
   /// garde le fichier et on l'envoie juste après, quand on a son identifiant.
   File? _vitrine;
+
+  /// Vrai quand la position vient du dernier point connu de l'appareil et non
+  /// d'une mesure fraîche.
+  bool _approximatif = false;
 
   Future<void> _pickVitrine() async {
     final picked = await ImagePicker().pickImage(
@@ -360,15 +376,17 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
 
   Widget _buildLocation() {
     final located = _lat != null && _lng != null;
+    // Le vert dirait « c'est bon » alors que le point reste incertain.
+    final sur = located && !_approximatif;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: located
+        color: sur
             ? AppColors.green.withValues(alpha: 0.07)
             : AppColors.gold.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: (located ? AppColors.green : AppColors.gold)
+          color: (sur ? AppColors.green : AppColors.gold)
               .withValues(alpha: 0.3),
         ),
       ),
@@ -378,12 +396,17 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
         Expanded(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(located ? 'الموقع تسجّل' : 'موقع الصالون',
+            Text(
+                located
+                    ? (_approximatif ? 'الموقع تقريبي' : 'الموقع تسجّل')
+                    : 'موقع الصالون',
                 style: AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
             const SizedBox(height: 2),
             Text(
               located
-                  ? '${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}'
+                  ? (_approximatif
+                      ? 'ثبّتو في الخريطة قبل ما تكمّل'
+                      : '${_lat!.toStringAsFixed(5)}, ${_lng!.toStringAsFixed(5)}')
                   : 'ضروري باش الحرفاء يلقاوك في الخريطة',
               style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
             ),

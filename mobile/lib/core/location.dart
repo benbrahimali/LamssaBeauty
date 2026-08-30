@@ -10,6 +10,19 @@ import '../widgets/async_states.dart';
 /// légèrement différents, et c'est justement ici que les écarts se paient :
 /// l'utilisateur ne sait jamais pourquoi ça ne marche pas.
 ///
+/// Position obtenue, et ce qu'elle vaut.
+class ResolvedPosition {
+  const ResolvedPosition(this.position, {this.approximate = false});
+
+  final Position position;
+
+  /// Vrai quand le point ne vient pas d'une mesure fraîche mais du dernier
+  /// point connu de l'appareil — il peut dater de plusieurs heures et d'un
+  /// autre quartier. Suffisant pour trier des salons par distance, pas pour
+  /// figer l'adresse d'un salon.
+  final bool approximate;
+}
+
 /// Renvoie `null` après avoir affiché la raison ; l'appelant n'a rien à dire
 /// de plus.
 ///
@@ -18,7 +31,7 @@ import '../widgets/async_states.dart';
 /// un écran qu'on vient d'ouvrir donne l'impression que l'app est cassée,
 /// alors que l'utilisateur n'a rien demandé. L'écran affiche alors sa propre
 /// invite, que l'utilisateur peut toucher s'il le veut.
-Future<Position?> resolvePosition(
+Future<ResolvedPosition?> resolvePosition(
   BuildContext context, {
   bool silencieux = false,
 }) async {
@@ -52,19 +65,33 @@ Future<Position?> resolvePosition(
       return null;
     }
 
-    // Un point précis peut mettre longtemps en intérieur : on borne l'attente
-    // et on se rabat sur la dernière position connue, qui suffit largement
-    // pour trier des salons par distance.
-    try {
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 15),
-      );
-    } catch (_) {
-      final last = await Geolocator.getLastKnownPosition();
-      if (last == null) dire('ما نجّمناش نلقاو موقعك — عاود برّا');
-      return last;
+    // Un point précis peut mettre longtemps à venir en intérieur — et c'est
+    // justement là que se tient un gérant qui crée son salon. On dégrade donc
+    // par étapes, en préférant toujours une mesure fraîche à une mesure
+    // précise mais périmée.
+    for (final essai in const [
+      (LocationAccuracy.high, 12),
+      // Deuxième chance moins exigeante : un point à cent mètres près, obtenu
+      // maintenant, vaut mieux que la position d'hier.
+      (LocationAccuracy.medium, 6),
+    ]) {
+      try {
+        return ResolvedPosition(await Geolocator.getCurrentPosition(
+          desiredAccuracy: essai.$1,
+          timeLimit: Duration(seconds: essai.$2),
+        ));
+      } catch (_) {
+        // Essai suivant, puis repli.
+      }
     }
+
+    final last = await Geolocator.getLastKnownPosition();
+    if (last == null) {
+      dire('ما نجّمناش نلقاو موقعك — عاود برّا');
+      return null;
+    }
+    // Signalé comme approximatif : l'appelant décide s'il peut s'en contenter.
+    return ResolvedPosition(last, approximate: true);
   } catch (e) {
     // Le message brut est plus utile qu'un « indisponible » générique : c'est
     // souvent lui qui dit que le service Google Play manque sur l'appareil.

@@ -74,7 +74,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   Future<void> _goToMyPosition() async {
     final position = await resolvePosition(context);
     if (position == null || !mounted) return;
-    final cible = LatLng(position.latitude, position.longitude);
+    final cible = LatLng(position.position.latitude, position.position.longitude);
     setState(() => _target = cible);
     await _map?.animateCamera(CameraUpdate.newLatLngZoom(cible, 17));
     await _resolveAddress();

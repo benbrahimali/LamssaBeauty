@@ -50,10 +50,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
       if (!mounted || position == null) return;
 
       final salons = context.read<SalonsController>();
-      salons.setPosition(position.latitude, position.longitude);
+      salons.setPosition(position.position.latitude, position.position.longitude);
       await salons.refresh();
       await _mapController?.animateCamera(CameraUpdate.newLatLngZoom(
-        LatLng(position.latitude, position.longitude),
+        LatLng(position.position.latitude, position.position.longitude),
         14,
       ));
     } finally {

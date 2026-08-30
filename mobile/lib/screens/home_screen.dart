@@ -73,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final position = await resolvePosition(context, silencieux: silencieux);
       if (!mounted || position == null) return;
-      salons.setPosition(position.latitude, position.longitude);
+      salons.setPosition(position.position.latitude, position.position.longitude);
       await salons.refresh();
     } finally {
       if (mounted && !silencieux) setState(() => _localisation = false);
