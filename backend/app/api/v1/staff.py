@@ -17,7 +17,7 @@ from app.models.documents import (
 )
 from app.models.enums import ACTIVE_BOOKING_STATUSES, ReviewStatus
 from app.schemas.booking import SlotsResponse
-from app.services.booking_service import available_slots
+from app.services.booking_service import available_slots, day_availability
 
 router = APIRouter()
 
@@ -104,6 +104,33 @@ async def slots(
     return await available_slots(
         staff=staff, salon=salon, day=day, service_ids=service_ids or None
     )
+
+
+@router.get("/{staff_id}/availability", summary="Disponibilité jour par jour")
+async def availability(
+    staff_id: PydanticObjectId,
+    start: date | None = Query(default=None, alias="from"),
+    days: int = Query(default=14, ge=1, le=60),
+    service_ids: list[PydanticObjectId] = Query(default=[]),
+):
+    """Ce que le calendrier doit afficher avant que le client tape un jour.
+
+    Sans cet appel, les 14 jours se ressemblent et il faut tous les essayer
+    pour trouver celui où le coiffeur travaille.
+    """
+    staff = await StaffMember.get(staff_id)
+    if not staff:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur introuvable")
+    salon = await get_salon(staff.salon_id)
+    return {
+        "days": await day_availability(
+            staff=staff,
+            salon=salon,
+            start_day=start or to_local(utcnow()).date(),
+            days=days,
+            service_ids=service_ids or None,
+        )
+    }
 
 
 @router.get("/{staff_id}/reviews", summary="Avis reçus par un coiffeur")

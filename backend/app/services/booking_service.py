@@ -89,6 +89,74 @@ async def busy_intervals(
     ]
 
 
+def unavailability_reason(
+    *,
+    salon_closed: bool,
+    staff_unavailable: bool,
+    is_day_off: bool,
+    slot_count: int,
+) -> str | None:
+    """Pourquoi un jour n'est pas réservable — du plus structurel au plus
+    conjoncturel.
+
+    L'ordre n'est pas décoratif. Un salon fermé explique déjà l'absence de
+    créneaux : annoncer « complet » ce jour-là enverrait le client réessayer
+    demain alors que le problème est ailleurs. À l'inverse « complet » ne se
+    dit que lorsque le coiffeur travaillait vraiment.
+    """
+    if salon_closed:
+        return "salon_closed"
+    if staff_unavailable:
+        return "staff_unavailable"
+    if is_day_off:
+        return "day_off"
+    if slot_count == 0:
+        return "full"
+    return None
+
+
+async def day_availability(
+    *,
+    staff: StaffMember,
+    salon: Salon,
+    start_day: date,
+    days: int = 14,
+    service_ids: list[PydanticObjectId] | None = None,
+) -> list[dict]:
+    """Disponibilité jour par jour, avec le motif quand il n'y a rien.
+
+    Le calendrier client proposait 14 jours identiques : il fallait taper
+    chaque jour pour découvrir qu'il était vide. Pire, « complet » et « le
+    coiffeur est en congé » se ressemblaient — le client réessayait au lieu de
+    changer de coiffeur. Le motif remonte donc avec la disponibilité.
+    """
+    resultat: list[dict] = []
+    for offset in range(days):
+        jour = start_day + timedelta(days=offset)
+        creneaux = await available_slots(
+            staff=staff, salon=salon, day=jour, service_ids=service_ids
+        )
+        libres = len(creneaux["slots"])
+
+        motif = unavailability_reason(
+            salon_closed=salon.status is SalonStatus.CLOSED
+            or salon_day_hours(salon, jour).closed,
+            staff_unavailable=not staff.available,
+            is_day_off=day_key(jour) in (staff.days_off or []),
+            slot_count=libres,
+        )
+
+        resultat.append(
+            {
+                "date": str(jour),
+                "available": libres > 0,
+                "slot_count": libres,
+                "reason": motif,
+            }
+        )
+    return resultat
+
+
 async def available_slots(
     *,
     staff: StaffMember,
@@ -98,6 +166,11 @@ async def available_slots(
 ) -> dict:
     """Créneaux libres d'un coiffeur pour un jour donné (§6 GET /staff/{id}/slots)."""
     if not staff.available or salon.status is SalonStatus.CLOSED:
+        return {"date": str(day), "duration_min": 0, "slots": []}
+
+    # Repos hebdomadaire du coiffeur : le salon peut être ouvert sans que lui
+    # le soit.
+    if day_key(day) in (staff.days_off or []):
         return {"date": str(day), "duration_min": 0, "slots": []}
 
     if service_ids:

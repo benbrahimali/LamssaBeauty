@@ -12,9 +12,18 @@ import '../widgets/async_states.dart';
 ///
 /// Renvoie `null` après avoir affiché la raison ; l'appelant n'a rien à dire
 /// de plus.
-Future<Position?> resolvePosition(BuildContext context) async {
+///
+/// [silencieux] pour une tentative que l'utilisateur n'a pas demandée — à
+/// l'ouverture de l'accueil, par exemple. Enchaîner les messages d'erreur sur
+/// un écran qu'on vient d'ouvrir donne l'impression que l'app est cassée,
+/// alors que l'utilisateur n'a rien demandé. L'écran affiche alors sa propre
+/// invite, que l'utilisateur peut toucher s'il le veut.
+Future<Position?> resolvePosition(
+  BuildContext context, {
+  bool silencieux = false,
+}) async {
   void dire(String message) {
-    if (context.mounted) showAppSnack(context, message);
+    if (!silencieux && context.mounted) showAppSnack(context, message);
   }
 
   try {
@@ -28,6 +37,9 @@ Future<Position?> resolvePosition(BuildContext context) async {
 
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
+      // Une boîte de permission qui surgit sans geste de l'utilisateur se fait
+      // refuser par réflexe — et un refus définitif ne se rattrape plus.
+      if (silencieux) return null;
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.deniedForever) {

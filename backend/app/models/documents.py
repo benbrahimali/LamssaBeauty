@@ -158,6 +158,12 @@ class StaffMember(Document):
     bio: str = ""
     specialties: list[str] = []
     available: bool = True                     # false => congé / suspendu
+
+    # Jours de repos hebdomadaires ('mon'..'sun'). Le salon peut ouvrir 6j/7
+    # pendant qu'un coiffeur se repose le lundi : sans cette liste, ses
+    # créneaux du lundi restaient réservables et le client se présentait pour
+    # rien.
+    days_off: list[str] = []
     is_owner: bool = False                     # un OWNER peut aussi couper (§3.1)
 
     # Statistiques publiques (§3.2)

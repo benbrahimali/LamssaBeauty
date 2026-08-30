@@ -8,6 +8,7 @@ import '../data/repositories/booking_repository.dart';
 import '../data/repositories/style_dna_repository.dart';
 import '../state/auth_controller.dart';
 import '../state/notifications_controller.dart';
+import '../core/location.dart';
 import '../state/salons_controller.dart';
 import '../core/env.dart';
 import '../theme/app_theme.dart';
@@ -41,6 +42,9 @@ class _HomeScreenState extends State<HomeScreen> {
   /// carte enverrait l'utilisateur vers un écran qui ne peut que échouer.
   bool _styleDnaAvailable = false;
 
+  /// Vrai pendant une recherche de position déclenchée par l'utilisateur.
+  bool _localisation = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,10 +52,70 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
       context.read<SalonsController>().load();
       _reloadUpcoming();
+      _localiser(silencieux: true);
 
       final available = await context.read<StyleDnaRepository>().isAvailable();
       if (mounted) setState(() => _styleDnaAvailable = available);
     });
+  }
+
+  /// Trie les salons par distance réelle.
+  ///
+  /// La section s'appelle « قريب منك » : sans position, elle mentait — les
+  /// salons arrivaient dans l'ordre du serveur, pas par proximité. La
+  /// tentative d'ouverture est silencieuse ; si elle échoue, l'écran propose
+  /// le geste au lieu d'insister.
+  Future<void> _localiser({bool silencieux = false}) async {
+    final salons = context.read<SalonsController>();
+    if (salons.hasPosition && silencieux) return;
+
+    if (!silencieux) setState(() => _localisation = true);
+    try {
+      final position = await resolvePosition(context, silencieux: silencieux);
+      if (!mounted || position == null) return;
+      salons.setPosition(position.latitude, position.longitude);
+      await salons.refresh();
+    } finally {
+      if (mounted && !silencieux) setState(() => _localisation = false);
+    }
+  }
+
+  /// Invite discrète, affichée seulement tant qu'on n'a pas de position.
+  Widget _buildLocationPrompt(SalonsController salons) {
+    if (salons.hasPosition) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+      child: GestureDetector(
+        onTap: _localisation ? null : () => _localiser(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.gold.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.gold.withValues(alpha: 0.3)),
+          ),
+          child: Row(children: [
+            if (_localisation)
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.gold),
+              )
+            else
+              const Icon(Icons.my_location, size: 16, color: AppColors.gold),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'حدّد موقعك باش نرتّبولك الصالونات حسب القرب',
+                maxLines: 2,
+                style: AppTextStyle.dmSans(size: 12, color: AppColors.gold),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
   }
 
   void _reloadUpcoming() {
@@ -97,6 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onAction: () => widget.onNav(1),
               ),
             )),
+            SliverToBoxAdapter(child: _buildLocationPrompt(salons)),
             SliverToBoxAdapter(child: _buildNearbySalons(salons)),
             if (salons.featuredStaff.isNotEmpty) ...[
               const SliverToBoxAdapter(child: Padding(

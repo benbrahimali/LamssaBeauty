@@ -102,6 +102,23 @@ class SalonRepository {
         .map((e) => BookingSlot.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
+
+  /// Disponibilité jour par jour, pour griser le calendrier avant que le
+  /// client tape un jour au hasard.
+  Future<List<DayAvailability>> availability({
+    required String staffId,
+    List<String> serviceIds = const [],
+    int days = 14,
+  }) async {
+    final data = await _api.get('/staff/$staffId/availability', query: {
+      'days': days,
+      if (serviceIds.isNotEmpty) 'service_ids': serviceIds,
+    }) as Map<String, dynamic>;
+
+    return ((data['days'] as List?) ?? const [])
+        .map((e) => DayAvailability.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
 }
 
 class SalonDetail {

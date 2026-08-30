@@ -157,6 +157,7 @@ class SalonAdminRepository {
     double commissionPct = 50,
     List<String> serviceIds = const [],
     List<String> specialties = const [],
+    List<String> daysOff = const [],
     String bio = '',
   }) async {
     final data = await _api.post('/salons/$salonId/staff', body: {
@@ -167,6 +168,7 @@ class SalonAdminRepository {
       'commission_pct': commissionPct,
       'service_ids': serviceIds,
       'specialties': specialties,
+      'days_off': daysOff,
       'bio': bio,
     }) as Map<String, dynamic>;
     return Coiffeur.fromJson(data);
@@ -179,6 +181,7 @@ class SalonAdminRepository {
     int? chairNumber,
     double? commissionPct,
     List<String>? serviceIds,
+    List<String>? daysOff,
     bool? available,
   }) async {
     final data = await _api.patch('/salons/$salonId/staff/$staffId', body: {
@@ -186,6 +189,7 @@ class SalonAdminRepository {
       if (chairNumber != null) 'chair_number': chairNumber,
       if (commissionPct != null) 'commission_pct': commissionPct,
       if (serviceIds != null) 'service_ids': serviceIds,
+      if (daysOff != null) 'days_off': daysOff,
       if (available != null) 'available': available,
     }) as Map<String, dynamic>;
     return Coiffeur.fromJson(data);

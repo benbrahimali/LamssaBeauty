@@ -165,6 +165,7 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
               chairNumber: payload.chair,
               commissionPct: payload.commissionPct,
               serviceIds: payload.serviceIds,
+              daysOff: payload.daysOff,
             )
           : _repo.updateStaff(
               widget.salonId,
@@ -173,6 +174,7 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
               chairNumber: payload.chair,
               commissionPct: payload.commissionPct,
               serviceIds: payload.serviceIds,
+              daysOff: payload.daysOff,
             ),
       existing == null ? 'الحجام تزاد ✅' : 'المعطيات تبدّلت ✅',
     );
@@ -834,6 +836,7 @@ class _StaffPayload {
   final int chair;
   final double commissionPct;
   final List<String> serviceIds;
+  final List<String> daysOff;
 
   const _StaffPayload({
     required this.phone,
@@ -841,6 +844,7 @@ class _StaffPayload {
     required this.chair,
     required this.commissionPct,
     required this.serviceIds,
+    required this.daysOff,
   });
 }
 
@@ -860,6 +864,7 @@ class _StaffSheetState extends State<_StaffSheet> {
   late int _chair;
   late double _commission;
   late Set<String> _serviceIds;
+  late Set<String> _daysOff;
 
   @override
   void initState() {
@@ -870,6 +875,7 @@ class _StaffSheetState extends State<_StaffSheet> {
     _chair = e?.chairNumber ?? 1;
     _commission = e?.commissionPct ?? 50;
     _serviceIds = {...?e?.serviceIds};
+    _daysOff = {...?e?.daysOff};
   }
 
   @override
@@ -877,6 +883,53 @@ class _StaffSheetState extends State<_StaffSheet> {
     _phone.dispose();
     _name.dispose();
     super.dispose();
+  }
+
+  /// Jours de repos hebdomadaires du coiffeur.
+  ///
+  /// Distinct des horaires du salon : celui-ci peut ouvrir six jours sur sept
+  /// pendant qu'un coiffeur se repose le lundi. Sans ce réglage, ses créneaux
+  /// du lundi restaient réservables et le client se déplaçait pour rien.
+  Widget _buildDaysOff() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Align(
+        alignment: Alignment.centerRight,
+        child: Text(
+          _daysOff.isEmpty ? 'أيّام الراحة : ما فماش' : 'أيّام الراحة',
+          style: AppTextStyle.dmSans(
+              size: 12, weight: FontWeight.w600, color: AppColors.sub),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: kWeekdays.map((jour) {
+          final repos = _daysOff.contains(jour.key);
+          return GestureDetector(
+            onTap: () => setState(() {
+              repos ? _daysOff.remove(jour.key) : _daysOff.add(jour.key);
+            }),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: repos
+                    ? AppColors.red.withValues(alpha: 0.15)
+                    : AppColors.card,
+                borderRadius: BorderRadius.circular(12),
+                border:
+                    Border.all(color: repos ? AppColors.red : AppColors.border),
+              ),
+              child: Text(jour.label,
+                  style: AppTextStyle.dmSans(
+                    size: 12,
+                    color: repos ? AppColors.red : AppColors.text,
+                  )),
+            ),
+          );
+        }).toList(),
+      ),
+    ]);
   }
 
   @override
@@ -989,6 +1042,8 @@ class _StaffSheetState extends State<_StaffSheet> {
               ),
             ),
           ),
+          const SizedBox(height: 18),
+          _buildDaysOff(),
           const SizedBox(height: 20),
           GoldButton(
             text: 'سجّل',
@@ -1002,6 +1057,7 @@ class _StaffSheetState extends State<_StaffSheet> {
                   chair: _chair,
                   commissionPct: _commission,
                   serviceIds: _serviceIds.toList(),
+                  daysOff: _daysOff.toList(),
                 ),
               );
             },

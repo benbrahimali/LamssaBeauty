@@ -213,6 +213,10 @@ class Coiffeur {
   final int chairNumber;
   final double commissionPct;
 
+  /// Jours de repos hebdomadaires ('mon'..'sun'). Le salon peut ouvrir 6j/7
+  /// pendant qu'un coiffeur se repose le lundi.
+  final List<String> daysOff;
+
   const Coiffeur({
     required this.id,
     required this.name,
@@ -228,6 +232,7 @@ class Coiffeur {
     this.experience = '',
     this.chairNumber = 1,
     this.commissionPct = 50,
+    this.daysOff = const [],
   });
 
   String get initials => initialsOf(name);
@@ -255,9 +260,26 @@ class Coiffeur {
       bio: json['bio']?.toString() ?? '',
       chairNumber: _toInt(json['chair_number'], 1),
       commissionPct: _toDouble(json['commission_pct'], 50),
+      daysOff:
+          (json['days_off'] as List?)?.map((e) => e.toString()).toList() ??
+              const [],
     );
   }
 }
+
+/// Jours de la semaine, dans l'ordre et avec la clé attendue par l'API.
+///
+/// La semaine commence lundi : c'est la convention du backend, et un décalage
+/// ici ferait poser le repos du dimanche sur le lundi.
+const kWeekdays = <({String key, String label})>[
+  (key: 'mon', label: 'ثنين'),
+  (key: 'tue', label: 'ثلاث'),
+  (key: 'wed', label: 'ربعا'),
+  (key: 'thu', label: 'خميس'),
+  (key: 'fri', label: 'جمعة'),
+  (key: 'sat', label: 'سبت'),
+  (key: 'sun', label: 'حدّ'),
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Service
@@ -375,6 +397,64 @@ class DaySlot {
   String get isoDate => '${date.year.toString().padLeft(4, '0')}-'
       '${date.month.toString().padLeft(2, '0')}-'
       '${date.day.toString().padLeft(2, '0')}';
+
+  DaySlot copyWith({bool? available}) => DaySlot(
+        dayShort: dayShort,
+        dayNum: dayNum,
+        fullDate: fullDate,
+        date: date,
+        available: available ?? this.available,
+      );
+}
+
+/// Pourquoi un jour n'est pas réservable.
+///
+/// « Complet » et « le coiffeur est en congé » demandent deux réactions
+/// opposées — réessayer plus tard, ou changer de coiffeur. Les confondre fait
+/// perdre le client.
+enum DayUnavailability {
+  salonClosed,
+  dayOff,
+  staffUnavailable,
+  full;
+
+  static DayUnavailability? fromApi(String? code) => switch (code) {
+        'salon_closed' => DayUnavailability.salonClosed,
+        'day_off' => DayUnavailability.dayOff,
+        'staff_unavailable' => DayUnavailability.staffUnavailable,
+        'full' => DayUnavailability.full,
+        _ => null,
+      };
+
+  /// Ce qu'on affiche sous le jour grisé, en tunisien.
+  String get label => switch (this) {
+        DayUnavailability.salonClosed => 'مسكّر',
+        DayUnavailability.dayOff => 'راحة',
+        DayUnavailability.staffUnavailable => 'غايب',
+        DayUnavailability.full => 'كامل',
+      };
+}
+
+/// Disponibilité d'un coiffeur pour une journée donnée.
+class DayAvailability {
+  const DayAvailability({
+    required this.isoDate,
+    this.available = false,
+    this.slotCount = 0,
+    this.reason,
+  });
+
+  final String isoDate;
+  final bool available;
+  final int slotCount;
+  final DayUnavailability? reason;
+
+  factory DayAvailability.fromJson(Map<String, dynamic> json) => DayAvailability(
+        isoDate: json['date']?.toString() ?? '',
+        available: json['available'] == true,
+        slotCount: (json['slot_count'] as num?)?.toInt() ?? 0,
+        reason: DayUnavailability.fromApi(json['reason']?.toString()),
+      );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

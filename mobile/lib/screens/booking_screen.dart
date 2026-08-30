@@ -321,7 +321,7 @@ class _BookingScreenState extends State<BookingScreen> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       _sectionTitle('اختار النهار 📅'),
       SizedBox(
-        height: 74,
+        height: 84,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -330,34 +330,100 @@ class _BookingScreenState extends State<BookingScreen> {
           itemBuilder: (context, i) {
             final day = controller.days[i];
             final selected = controller.dayIndex == i;
-            return GestureDetector(
-              onTap: () => controller.selectDay(i),
-              child: Container(
-                width: 60,
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.gold : AppColors.card,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: selected ? AppColors.gold : AppColors.border,
+            final etat = controller.availabilityFor(day);
+            final ouvert = controller.isDayOpen(day);
+
+            // Un jour fermé se voit avant d'être touché : le client n'a plus
+            // à essayer les quatorze cases pour trouver celle où le coiffeur
+            // travaille. Le motif distingue « راحة » de « كامل », qui
+            // n'appellent pas la même réaction.
+            return Opacity(
+              opacity: ouvert ? 1 : 0.45,
+              child: GestureDetector(
+                onTap: ouvert ? () => controller.selectDay(i) : null,
+                child: Container(
+                  width: 60,
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.gold : AppColors.card,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: selected ? AppColors.gold : AppColors.border,
+                    ),
                   ),
+                  child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(day.dayShort,
+                            style: AppTextStyle.dmSans(
+                              size: 11,
+                              color: selected ? Colors.black : AppColors.sub,
+                            )),
+                        const SizedBox(height: 3),
+                        Text(day.dayNum,
+                            style: AppTextStyle.playfair(
+                              size: 19,
+                              color: selected ? Colors.black : AppColors.text,
+                            )),
+                        if (!ouvert && etat?.reason != null) ...[
+                          const SizedBox(height: 2),
+                          Text(etat!.reason!.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyle.dmSans(
+                                size: 9,
+                                color:
+                                    selected ? Colors.black : AppColors.sub,
+                              )),
+                        ],
+                      ]),
                 ),
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text(day.dayShort, style: AppTextStyle.dmSans(
-                    size: 11,
-                    color: selected ? Colors.black : AppColors.sub,
-                  )),
-                  const SizedBox(height: 3),
-                  Text(day.dayNum, style: AppTextStyle.playfair(
-                    size: 19,
-                    color: selected ? Colors.black : AppColors.text,
-                  )),
-                ]),
               ),
             );
           },
         ),
       ),
+      if (controller.days.every((d) => !controller.isDayOpen(d)) &&
+          !controller.loadingDays)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+          child: Text(
+            'هالحجّام ما عندو حتّى نهار خالي في الأسبوعين الجايين — '
+            'جرّب حجّام آخر.',
+            style: AppTextStyle.dmSans(size: 12, color: AppColors.sub),
+          ),
+        ),
     ]);
+  }
+
+  /// Journée sans créneau : le motif change ce que le client doit faire.
+  ///
+  /// « Complet » invite à revenir un autre jour ; un jour de repos invite à
+  /// changer de coiffeur. Le même message pour les deux faisait tourner en
+  /// rond ceux qui tombaient sur le repos hebdomadaire.
+  Widget _buildEmptyDay(BookingController controller) {
+    final motif = controller.availabilityFor(controller.selectedDay)?.reason;
+    return switch (motif) {
+      DayUnavailability.dayOff => const AppEmpty(
+          emoji: '😴',
+          title: 'الحجّام في راحة',
+          subtitle: 'اختار نهار آخر ولا حجّام آخر.',
+        ),
+      DayUnavailability.salonClosed => const AppEmpty(
+          emoji: '🔒',
+          title: 'الصالون مسكّر',
+          subtitle: 'شوف نهار آخر في التقويم.',
+        ),
+      DayUnavailability.staffUnavailable => const AppEmpty(
+          emoji: '🚫',
+          title: 'الحجّام مش متوفّر',
+          subtitle: 'جرّب حجّام آخر في نفس الصالون.',
+        ),
+      _ => const AppEmpty(
+          emoji: '📅',
+          title: 'كامل هالنهار',
+          subtitle: 'جرّب نهار آخر ولا حجّام آخر.',
+        ),
+    };
   }
 
   Widget _buildSlotsSection(BookingController controller) {
@@ -380,13 +446,9 @@ class _BookingScreenState extends State<BookingScreen> {
           ),
         )
       else if (controller.slots.isEmpty)
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20),
-          child: AppEmpty(
-            emoji: '📅',
-            title: 'Complet ce jour-là',
-            subtitle: 'Essaie un autre jour ou un autre coiffeur.',
-          ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: _buildEmptyDay(controller),
         )
       else
         Padding(

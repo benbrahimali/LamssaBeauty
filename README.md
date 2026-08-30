@@ -70,6 +70,52 @@ pré-remplit le code OTP renvoyé par l'API et le code `000000` fonctionne toujo
 | 2.4 / 8.5 | Style DNA — analyse du selfie par modèle vision | ✅ | `services/style_dna_service.py`, `api/v1/style_dna.py` |
 | 2.4 | Liste d'attente, programme fidélité | ❌ V2 | — |
 
+### Calendrier : le jour de repos du coiffeur (§3.3, §3.5)
+
+Le salon ouvre six jours sur sept ; le coiffeur, lui, se repose le lundi. Les
+horaires du salon ne suffisaient donc pas : les créneaux du lundi restaient
+réservables et le client se déplaçait pour rien.
+
+Chaque coiffeur déclare ses **jours de repos hebdomadaires** (`days_off`),
+distincts des horaires du salon et des congés ponctuels (`TimeOff`, déjà
+gérés). Une clé de jour inconnue est refusée en 422 plutôt qu'ignorée : un
+« lundi » écrit en toutes lettres ne bloquerait rien, et personne ne s'en
+apercevrait avant qu'un client se présente devant une chaise vide.
+
+`GET /staff/{id}/availability` rend les quatorze jours d'un coup, chacun avec
+son **motif** d'indisponibilité. L'ordre des motifs n'est pas décoratif :
+
+```
+salon fermé  →  coiffeur suspendu  →  jour de repos  →  complet
+```
+
+Un salon fermé explique déjà l'absence de créneaux ; annoncer « complet » ce
+jour-là enverrait le client réessayer demain alors que le problème est
+ailleurs. Et surtout, **« complet » et « en repos » n'appellent pas la même
+réaction** : le premier invite à revenir un autre jour, le second à changer de
+coiffeur. Les confondre faisait tourner le client en rond.
+
+Le calendrier grise donc les jours fermés **avant** qu'on les touche, avec
+l'étiquette du motif (`راحة`, `كامل`, `مسكّر`), et le tunnel s'ouvre sur le
+premier jour réellement travaillé — sans quoi il affichait « complet » avant
+même que le client ait choisi quoi que ce soit.
+
+Si l'appel échoue, le calendrier reste entièrement ouvert : c'est un confort
+perdu, pas une réservation perdue.
+
+### Salons proches : la position réelle (§3.2)
+
+La section « قريب منك » de l'accueil ne demandait jamais la position — les
+salons arrivaient dans l'ordre du serveur, pas par proximité. Seul l'écran
+Carte savait se localiser.
+
+L'accueil tente désormais une localisation **silencieuse** à l'ouverture :
+silencieuse au sens strict, elle n'ouvre aucune boîte de permission et
+n'affiche aucune erreur. Une permission demandée sans geste de l'utilisateur
+se fait refuser par réflexe, et un refus définitif ne se rattrape plus. Tant
+qu'on n'a pas de position, l'écran affiche une invite discrète que
+l'utilisateur peut toucher ; c'est seulement là que la demande système part.
+
 ### Gestion financière du gérant (§3.4)
 
 La caisse dit ce qui est entré ; le compte de résultat dit ce qu'il reste. Un

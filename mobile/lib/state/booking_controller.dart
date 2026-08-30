@@ -21,12 +21,28 @@ class BookingController extends ChangeNotifier {
   BookingSlot? _slot;
 
   List<BookingSlot> _slots = const [];
+
+  /// Disponibilité de chaque jour, indexée par date ISO. Vide tant que le
+  /// coiffeur et la prestation ne sont pas choisis : la durée du service
+  /// change ce qui rentre dans la journée.
+  Map<String, DayAvailability> _availability = const {};
+  bool _loadingDays = false;
   bool _loadingSlots = false;
   bool _submitting = false;
   String? _error;
   List<String> _alternatives = const [];
 
   ServiceItem? get service => _service;
+
+  bool get loadingDays => _loadingDays;
+
+  /// Ce qu'on sait d'un jour. Null tant que la disponibilité n'est pas
+  /// chargée — le calendrier reste alors neutre plutôt que faussement fermé.
+  DayAvailability? availabilityFor(DaySlot day) => _availability[day.isoDate];
+
+  /// Vrai quand on sait que le jour est réservable, ou qu'on ne sait rien
+  /// encore. On ne grise que sur une information confirmée.
+  bool isDayOpen(DaySlot day) => _availability[day.isoDate]?.available ?? true;
   String? get staffId => _staffId;
   int get dayIndex => _dayIndex;
   DaySlot get selectedDay => days[_dayIndex];
@@ -53,6 +69,7 @@ class BookingController extends ChangeNotifier {
   Future<void> selectService(ServiceItem service) async {
     _service = service;
     _slot = null;
+    await _loadAvailability();
     await _loadSlots();
   }
 
@@ -60,6 +77,7 @@ class BookingController extends ChangeNotifier {
     if (_staffId == staffId) return;
     _staffId = staffId;
     _slot = null;
+    await _loadAvailability();
     await _loadSlots();
   }
 
@@ -73,6 +91,45 @@ class BookingController extends ChangeNotifier {
   void selectSlot(BookingSlot slot) {
     _slot = slot;
     notifyListeners();
+  }
+
+  /// Charge l'état des 14 jours et recale la sélection si besoin.
+  ///
+  /// Sans ce recalage, le tunnel s'ouvre sur aujourd'hui — souvent le jour de
+  /// repos du coiffeur — et le client voit « complet » avant même d'avoir
+  /// choisi quoi que ce soit.
+  Future<void> _loadAvailability() async {
+    final staffId = _staffId;
+    if (staffId == null || _service == null) {
+      _availability = const {};
+      notifyListeners();
+      return;
+    }
+
+    _loadingDays = true;
+    notifyListeners();
+    try {
+      final jours = await _salons.availability(
+        staffId: staffId,
+        serviceIds: [_service!.id],
+        days: days.length,
+      );
+      _availability = {for (final j in jours) j.isoDate: j};
+
+      if (!isDayOpen(days[_dayIndex])) {
+        final premier = days.indexWhere(isDayOpen);
+        // Aucun jour ouvert sur la quinzaine : on ne bouge pas, l'écran dira
+        // pourquoi. Déplacer la sélection n'y changerait rien.
+        if (premier >= 0) _dayIndex = premier;
+      }
+    } on ApiException {
+      // La disponibilité n'est qu'un confort : sans elle le calendrier reste
+      // ouvert et l'utilisateur découvre au clic, comme avant.
+      _availability = const {};
+    } finally {
+      _loadingDays = false;
+      notifyListeners();
+    }
   }
 
   Future<void> _loadSlots() async {

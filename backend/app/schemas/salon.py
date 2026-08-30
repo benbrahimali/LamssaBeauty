@@ -3,8 +3,26 @@ from datetime import datetime
 from beanie import PydanticObjectId
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.timeutils import WEEKDAY_KEYS
 from app.models.documents import DayHours, GeoPoint
 from app.models.enums import CommissionType, SalonStatus, SalonType
+
+
+def _valid_days(v: list[str] | None) -> list[str] | None:
+    """Refuse une clé de jour inconnue plutôt que de l'ignorer en silence.
+
+    Un « lundi » écrit en toutes lettres ne bloquerait aucun créneau, et
+    personne ne s'en apercevrait avant qu'un client se déplace pour rien.
+    """
+    if v is None:
+        return None
+    inconnus = sorted(set(v) - set(WEEKDAY_KEYS))
+    if inconnus:
+        raise ValueError(
+            f"Jour inconnu : {', '.join(inconnus)}. Attendu : {', '.join(WEEKDAY_KEYS)}"
+        )
+    # Dédoublonné et remis dans l'ordre de la semaine : l'affichage en dépend.
+    return [j for j in WEEKDAY_KEYS if j in set(v)]
 
 
 class SalonCreate(BaseModel):
@@ -82,6 +100,7 @@ class StaffCreate(BaseModel):
     service_ids: list[PydanticObjectId] = []
     bio: str = ""
     specialties: list[str] = []
+    days_off: list[str] = []
     is_owner: bool = False
 
     @field_validator("phone")
@@ -90,6 +109,11 @@ class StaffCreate(BaseModel):
         from app.schemas.auth import normalize_phone
 
         return normalize_phone(v)
+
+    @field_validator("days_off")
+    @classmethod
+    def _days_off(cls, v: list[str]) -> list[str]:
+        return _valid_days(v) or []
 
 
 class StaffUpdate(BaseModel):
@@ -102,6 +126,12 @@ class StaffUpdate(BaseModel):
     bio: str | None = None
     specialties: list[str] | None = None
     available: bool | None = None
+    days_off: list[str] | None = None
+
+    @field_validator("days_off")
+    @classmethod
+    def _days_off(cls, v: list[str] | None) -> list[str] | None:
+        return _valid_days(v)
 
 
 class TimeOffCreate(BaseModel):

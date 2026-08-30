@@ -975,4 +975,118 @@ void main() {
       );
     });
   });
+
+  // ── Calendrier : jour de repos du coiffeur ─────────────────────────────
+  //
+  // Le salon peut ouvrir 6j/7 pendant qu'un coiffeur se repose le lundi. Sans
+  // ces règles, ses créneaux du lundi restaient réservables et le client se
+  // déplaçait pour rien.
+  group('Disponibilité par jour (§3.3, §3.5)', () {
+    late String salonId;
+    late String staffId;
+
+    setUp(() async {
+      await login(ownerPhone);
+      salonId = (await auth.me()).ownedSalonId!;
+      staffId = (await salons.detail(salonId)).staff.first.id;
+    });
+
+    /// Remet le coiffeur au travail : les autres tests comptent dessus.
+    void restaurer() => addTearDown(() async {
+          await login(ownerPhone);
+          await admin.updateStaff(salonId, staffId, daysOff: const []);
+        });
+
+    test('le calendrier annonce chaque jour avant qu’on le touche', () async {
+      final jours = await salons.availability(staffId: staffId);
+
+      expect(jours, hasLength(14));
+      expect(jours.every((j) => j.isoDate.isNotEmpty), isTrue);
+      // Un jour ouvert a des créneaux, un jour fermé a un motif : jamais ni
+      // l'un ni l'autre, sinon l'écran n'a rien à afficher.
+      for (final j in jours) {
+        if (j.available) {
+          expect(j.slotCount, greaterThan(0));
+          expect(j.reason, isNull);
+        } else {
+          expect(j.slotCount, 0);
+          expect(j.reason, isNotNull);
+        }
+      }
+    });
+
+    test('un jour de repos ferme le jour et le dit', () async {
+      restaurer();
+      final avant = await salons.availability(staffId: staffId);
+      final ouvert = avant.firstWhere((j) => j.available);
+      final cle = _cleJour(DateTime.parse(ouvert.isoDate));
+
+      await admin.updateStaff(salonId, staffId, daysOff: [cle]);
+      final apres = await salons.availability(staffId: staffId);
+
+      final memeJour = apres.firstWhere((j) => j.isoDate == ouvert.isoDate);
+      expect(memeJour.available, isFalse);
+      expect(memeJour.reason, DayUnavailability.dayOff);
+      expect(memeJour.slotCount, 0);
+    });
+
+    test('le repos vaut pour toutes les semaines, pas seulement la première',
+        () async {
+      restaurer();
+      final avant = await salons.availability(staffId: staffId);
+      final ouvert = avant.firstWhere((j) => j.available);
+      final cle = _cleJour(DateTime.parse(ouvert.isoDate));
+
+      await admin.updateStaff(salonId, staffId, daysOff: [cle]);
+      final apres = await salons.availability(staffId: staffId);
+
+      final concernes = apres.where(
+          (j) => _cleJour(DateTime.parse(j.isoDate)) == cle);
+      expect(concernes.length, greaterThanOrEqualTo(2),
+          reason: 'sur 14 jours, chaque jour de semaine revient au moins deux fois');
+      expect(concernes.every((j) => j.reason == DayUnavailability.dayOff), isTrue);
+    });
+
+    test('les créneaux du jour de repos sont vides aussi', () async {
+      restaurer();
+      final avant = await salons.availability(staffId: staffId);
+      final ouvert = avant.firstWhere((j) => j.available);
+      final cle = _cleJour(DateTime.parse(ouvert.isoDate));
+
+      await admin.updateStaff(salonId, staffId, daysOff: [cle]);
+
+      // Le calendrier et la grille horaire doivent dire la même chose : sinon
+      // un client passant par un lien direct réserverait quand même.
+      final creneaux =
+          await salons.slots(staffId: staffId, isoDate: ouvert.isoDate);
+      expect(creneaux, isEmpty);
+    });
+
+    test('un jour de repos écrit en toutes lettres est refusé', () async {
+      // Un « lundi » accepté en silence ne bloquerait rien, et personne ne
+      // s'en apercevrait avant qu'un client se déplace.
+      await expectLater(
+        admin.updateStaff(salonId, staffId, daysOff: const ['lundi']),
+        throwsA(isA<ApiException>()),
+      );
+    });
+
+    test('sans repos déclaré, seuls les jours de fermeture du salon ferment',
+        () async {
+      await admin.updateStaff(salonId, staffId, daysOff: const []);
+      final jours = await salons.availability(staffId: staffId);
+
+      expect(
+        jours.any((j) => j.reason == DayUnavailability.dayOff),
+        isFalse,
+        reason: 'aucun repos déclaré : aucun jour ne doit être marqué « راحة »',
+      );
+      expect(jours.any((j) => j.available), isTrue,
+          reason: 'le coiffeur doit bien travailler quelque part dans la quinzaine');
+    });
+  });
 }
+
+/// Clé de jour attendue par l'API — la semaine commence lundi.
+String _cleJour(DateTime d) =>
+    const ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'][d.weekday - 1];
