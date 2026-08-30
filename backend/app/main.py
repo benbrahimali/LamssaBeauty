@@ -7,9 +7,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pathlib import Path
+
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.v1 import (
+    admin,
     advances,
     auth,
     bookings,
@@ -93,10 +97,22 @@ app.include_router(portfolio.router, prefix=f"{V1}/portfolio", tags=["portfolio"
 app.include_router(reels.router, prefix=f"{V1}/reels", tags=["reels"])
 app.include_router(notifications.router, prefix=f"{V1}/notifications", tags=["notifications"])
 app.include_router(style_dna.router, prefix=f"{V1}/style-dna", tags=["style dna"])
+app.include_router(admin.router, prefix=f"{V1}/admin", tags=["administration"])
 
 # En dev, les médias uploadés sont servis depuis le disque ; en prod ils vont sur S3/R2.
 os.makedirs("./media", exist_ok=True)
 app.mount("/media", StaticFiles(directory="./media"), name="media")
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_console() -> FileResponse:
+    """Console d'administration.
+
+    Servie par l'API elle-même : une page autonome, sans build ni dépendance,
+    qui parle aux routes `/api/v1/admin`. La page est publique — c'est le
+    jeton qu'elle réclame ensuite qui protège les données.
+    """
+    return FileResponse(Path(__file__).parent / "static" / "admin.html")
 
 
 @app.get("/health", tags=["infra"], summary="Sonde de disponibilité")

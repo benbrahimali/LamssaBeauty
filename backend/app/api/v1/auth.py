@@ -95,6 +95,14 @@ async def verify_otp(body: OTPVerify):
         user.name = body.name
         await user.save()
 
+    # Le drapeau se recalcule à chaque connexion à partir de la configuration :
+    # retirer un numéro de ADMIN_PHONES retire l'accès, sans avoir à toucher
+    # la base.
+    admin = user.phone in settings.admin_phones
+    if user.is_admin != admin:
+        user.is_admin = admin
+        await user.save()
+
     tokens = await create_tokens(str(user.id), user.role)
     return AuthOut(**tokens, user=_user_out(user))
 

@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="fr" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LAMSSA — Administration</title>
+<style>
+  :root {
+    --bg: #0B0D12; --card: #141821; --card2: #1B2029; --border: #262C38;
+    --text: #ECEFF4; --sub: #8B93A5; --gold: #C9A961; --red: #E5484D;
+    --green: #30A46C;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 18px 28px; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
+  }
+  h1 { font-size: 17px; margin: 0; letter-spacing: .5px; }
+  h1 span { color: var(--gold); }
+  .grow { flex: 1; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 9px; padding: 8px 14px;
+    background: var(--card2); color: var(--text); border: 1px solid var(--border);
+  }
+  button:hover { border-color: var(--gold); }
+  button.primary { background: var(--gold); color: #000; border-color: var(--gold); font-weight: 600; }
+  button.danger { color: var(--red); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input {
+    font: inherit; background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px;
+  }
+  nav { display: flex; gap: 8px; padding: 16px 28px 0; flex-wrap: wrap; }
+  nav button.on { background: var(--gold); color: #000; border-color: var(--gold); }
+  main { padding: 20px 28px 60px; }
+  .cards { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .stat .k { color: var(--sub); font-size: 12px; }
+  .stat .v { font-size: 26px; font-weight: 700; margin-top: 4px; }
+  .stat .d { color: var(--sub); font-size: 12px; margin-top: 6px; }
+  .wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
+  table { border-collapse: collapse; width: 100%; min-width: 720px; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--border); }
+  th { color: var(--sub); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  tr:last-child td { border-bottom: 0; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .pill.ok { background: rgba(48,163,108,.16); color: var(--green); }
+  .pill.off { background: rgba(229,72,77,.16); color: var(--red); }
+  .pill.warn { background: rgba(201,169,97,.16); color: var(--gold); }
+  .muted { color: var(--sub); }
+  .bar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .center { max-width: 380px; margin: 90px auto; text-align: center; }
+  .center h2 { font-weight: 600; }
+  .note { color: var(--sub); font-size: 12px; margin: 10px 0 0; }
+  #msg { padding: 10px 28px; color: var(--gold); min-height: 20px; font-size: 13px; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+
+<div id="login" class="center">
+  <h1>LAMSSA <span>Administration</span></h1>
+  <h2>Connexion</h2>
+  <p class="note">Le numéro doit figurer dans <code>ADMIN_PHONES</code>.</p>
+  <div style="display:grid; gap:10px; margin-top:18px">
+    <input id="phone" placeholder="+216 99 000 000" autocomplete="tel">
+    <input id="code" placeholder="Code OTP" autocomplete="one-time-code">
+    <button class="primary" onclick="login()">Entrer</button>
+  </div>
+  <p class="note" id="loginErr"></p>
+</div>
+
+<div id="app" class="hide">
+  <header>
+    <h1>LAMSSA <span>Administration</span></h1>
+    <div class="grow"></div>
+    <span class="muted" id="who"></span>
+    <button onclick="logout()">Quitter</button>
+  </header>
+  <nav>
+    <button data-tab="stats" class="on" onclick="go('stats')">Vue d'ensemble</button>
+    <button data-tab="salons" onclick="go('salons')">Salons</button>
+    <button data-tab="users" onclick="go('users')">Comptes</button>
+    <button data-tab="reviews" onclick="go('reviews')">Avis</button>
+    <button data-tab="reels" onclick="go('reels')">Reels</button>
+    <button data-tab="maint" onclick="go('maint')">Maintenance</button>
+  </nav>
+  <div id="msg"></div>
+  <main id="view"></main>
+</div>
+
+<script>
+const API = '/api/v1';
+let token = localStorage.getItem('lamssa_admin_token') || '';
+let tab = 'stats';
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => (
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function say(text, bad) {
+  $('msg').textContent = text || '';
+  $('msg').style.color = bad ? 'var(--red)' : 'var(--gold)';
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(API + path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json',
+               Authorization: 'Bearer ' + token, ...(options.headers || {}) },
+  });
+  if (res.status === 401 || res.status === 403) {
+    // Le jeton a expiré ou le numéro n'est plus administrateur : on renvoie
+    // à la connexion plutôt que d'afficher des tableaux vides.
+    logout();
+    throw new Error('Session expirée');
+  }
+  const body = res.status === 204 ? null : await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.detail || ('Erreur ' + res.status));
+  return body;
+}
+
+async function login() {
+  $('loginErr').textContent = '';
+  try {
+    const res = await fetch(API + '/auth/otp/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: $('phone').value.trim(),
+                             code: $('code').value.trim() }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || 'Connexion refusée');
+    token = body.access_token;
+    localStorage.setItem('lamssa_admin_token', token);
+    await start();
+  } catch (e) {
+    $('loginErr').textContent = e.message;
+  }
+}
+
+function logout() {
+  token = '';
+  localStorage.removeItem('lamssa_admin_token');
+  $('app').classList.add('hide');
+  $('login').classList.remove('hide');
+}
+
+async function start() {
+  try {
+    const me = await api('/auth/me');
+    $('who').textContent = (me.user?.name || me.user?.phone || '');
+    $('login').classList.add('hide');
+    $('app').classList.remove('hide');
+    go(tab);
+  } catch (e) { /* logout déjà déclenché */ }
+}
+
+function go(next) {
+  tab = next;
+  document.querySelectorAll('nav button').forEach((b) =>
+    b.classList.toggle('on', b.dataset.tab === next));
+  say('');
+  ({ stats: viewStats, salons: viewSalons, users: viewUsers,
+     reviews: viewReviews, reels: viewReels, maint: viewMaint }[next])();
+}
+
+function table(headers, rows) {
+  return `<div class="wrap"><table><thead><tr>${
+    headers.map((h) => `<th>${h}</th>`).join('')
+  }</tr></thead><tbody>${rows.join('') || `<tr><td colspan="${headers.length}" class="muted">Rien à afficher</td></tr>`}</tbody></table></div>`;
+}
+
+function stat(k, v, d) {
+  return `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${
+    d ? `<div class="d">${d}</div>` : ''}</div>`;
+}
+
+// ── Vue d'ensemble ─────────────────────────────────────────────────────────
+async function viewStats() {
+  $('view').innerHTML = '<p class="muted">Chargement…</p>';
+  const s = await api('/admin/stats');
+  $('view').innerHTML = `<div class="cards">
+    ${stat('Salons', s.salons.total, `${s.salons.ouverts} ouverts · ${s.salons.fermes} fermés`)}
+    ${stat('Comptes', s.comptes.total, `${s.comptes.clients} clients · ${s.comptes.gerants} gérants`)}
+    ${stat('Équipes', s.equipes, 'coiffeurs rattachés')}
+    ${stat('Rendez-vous', s.rdv.total, `${s.rdv.aujourdhui} aujourd'hui · ${s.rdv.semaine} sur 7 j`)}
+    ${stat('Encaissé par les salons', s.encaisse.total.toFixed(2) + ' DT',
+           `${s.encaisse.transactions} transactions`)}
+    ${stat('Part des équipes', s.encaisse.part_equipes.toFixed(2) + ' DT',
+           'reversé aux coiffeurs')}
+    ${stat('Reels', s.contenus.reels, `${s.contenus.portfolio} photos de portfolio`)}
+    ${stat('Avis', s.contenus.avis, `${s.contenus.avis_masques} masqués`)}
+  </div>
+  <p class="note">« Encaissé par les salons » est le chiffre d'affaires des
+  salons, pas un revenu de la plateforme.</p>`;
+}
+
+// ── Salons ─────────────────────────────────────────────────────────────────
+async function viewSalons() {
+  $('view').innerHTML = '<p class="muted">Chargement…</p>';
+  const { salons } = await api('/admin/salons');
+  const rows = salons.map((s) => {
+    const hist = Object.entries(s.history).map(([k, v]) => `${k} ${v}`).join(', ');
+    const ouvert = s.status === 'open';
+    return `<tr>
+      <td><strong>${esc(s.name)}</strong>${s.looks_like_test
+        ? ' <span class="pill warn">test</span>' : ''}
+        <div class="muted">${esc(s.city || '—')} · ${esc(s.type)}</div></td>
+      <td>${esc(s.owner_name || '—')}<div class="muted">${esc(s.owner_phone)}</div></td>
+      <td>${s.staff} / ${s.services}</td>
+      <td>${s.photos}</td>
+      <td><span class="pill ${ouvert ? 'ok' : 'off'}">${ouvert ? 'ouvert' : 'fermé'}</span></td>
+      <td class="muted">${hist || '—'}</td>
+      <td>
+        <button onclick="setStatus('${s.id}','${ouvert ? 'closed' : 'open'}')">
+          ${ouvert ? 'Suspendre' : 'Rouvrir'}</button>
+        <button class="danger" ${s.deletable ? '' : 'disabled'}
+          title="${s.deletable ? 'Supprimer définitivement'
+                               : 'Historique présent — suspendez plutôt'}"
+          onclick="delSalon('${s.id}','${esc(s.name)}')">Supprimer</button>
+      </td></tr>`;
+  });
+  $('view').innerHTML = table(
+    ['Salon', 'Propriétaire', 'Équipe / services', 'Photos', 'Statut', 'Historique', ''],
+    rows);
+}
+
+async function setStatus(id, value) {
+  try {
+    await api(`/admin/salons/${id}/status?value=${value}`, { method: 'PATCH' });
+    say('Statut modifié.');
+    viewSalons();
+  } catch (e) { say(e.message, true); }
+}
+
+async function delSalon(id, name) {
+  if (!confirm(`Supprimer « ${name} » ? Cette action est définitive.`)) return;
+  try {
+    await api(`/admin/salons/${id}`, { method: 'DELETE' });
+    say('Salon supprimé.');
+    viewSalons();
+  } catch (e) { say(e.message, true); }
+}
+
+// ── Comptes ────────────────────────────────────────────────────────────────
+async function viewUsers(q = '') {
+  const { users } = await api('/admin/users?q=' + encodeURIComponent(q));
+  const rows = users.map((u) => `<tr>
+    <td>${esc(u.name || '—')}</td>
+    <td>${esc(u.phone)}</td>
+    <td><span class="pill ${u.role === 'OWNER' ? 'warn' : 'ok'}">${esc(u.role)}</span></td>
+    <td>${u.is_admin ? '<span class="pill warn">admin</span>' : ''}</td>
+    <td class="muted">${esc(u.locale)}</td></tr>`);
+  $('view').innerHTML = `<div class="bar">
+      <input id="q" placeholder="Nom ou téléphone" value="${esc(q)}">
+      <button onclick="viewUsers($('q').value)">Chercher</button>
+      ${q ? '<button onclick="viewUsers()">Tout</button>' : ''}
+    </div>` + table(['Nom', 'Téléphone', 'Rôle', '', 'Langue'], rows);
+}
+
+// ── Avis ───────────────────────────────────────────────────────────────────
+async function viewReviews() {
+  const { reviews } = await api('/admin/reviews');
+  const rows = reviews.map((r) => {
+    const cache = r.status === 'hidden';
+    return `<tr>
+      <td>${'★'.repeat(r.rating)}<span class="muted">${'★'.repeat(5 - r.rating)}</span></td>
+      <td>${esc(r.comment) || '<span class="muted">sans commentaire</span>'}</td>
+      <td class="muted">${esc(r.salon)}</td>
+      <td><span class="pill ${cache ? 'off' : 'ok'}">${cache ? 'masqué' : 'publié'}</span></td>
+      <td><button onclick="modReview('${r.id}',${!cache})">
+        ${cache ? 'Republier' : 'Masquer'}</button></td></tr>`;
+  });
+  $('view').innerHTML = table(['Note', 'Commentaire', 'Salon', 'Statut', ''], rows) +
+    `<p class="note">Un avis est masqué, jamais supprimé : une modération
+     erronée doit pouvoir se rattraper.</p>`;
+}
+
+async function modReview(id, hidden) {
+  try {
+    await api(`/admin/reviews/${id}?hidden=${hidden}`, { method: 'PATCH' });
+    say('Avis mis à jour.');
+    viewReviews();
+  } catch (e) { say(e.message, true); }
+}
+
+// ── Reels ──────────────────────────────────────────────────────────────────
+async function viewReels() {
+  const { reels } = await api('/admin/reels');
+  const rows = reels.map((r) => `<tr>
+    <td>${esc(r.caption) || '<span class="muted">sans texte</span>'}</td>
+    <td class="muted">${esc(r.salon)}</td>
+    <td>${esc(r.author)}</td>
+    <td>${r.views} vues · ${r.likes} ❤</td>
+    <td class="muted">${Math.round(r.duration_sec)} s</td>
+    <td><button class="danger" onclick="delReel('${r.id}')">Retirer</button></td></tr>`);
+  $('view').innerHTML = table(['Légende', 'Salon', 'Auteur', 'Audience', 'Durée', ''], rows);
+}
+
+async function delReel(id) {
+  if (!confirm('Retirer ce reel ? La vidéo sera aussi effacée de Cloudinary.')) return;
+  try {
+    await api(`/admin/reels/${id}`, { method: 'DELETE' });
+    say('Reel retiré.');
+    viewReels();
+  } catch (e) { say(e.message, true); }
+}
+
+// ── Maintenance ────────────────────────────────────────────────────────────
+async function viewMaint() {
+  const t = await api('/admin/maintenance/test-data');
+  const rows = t.salons.map((s) => {
+    const hist = Object.entries(s.history).map(([k, v]) => `${k} ${v}`).join(', ');
+    return `<tr><td>${esc(s.name)}</td>
+      <td class="muted">${hist || '—'}</td>
+      <td>${s.deletable ? '<span class="pill ok">supprimable</span>'
+                        : '<span class="pill off">conservé</span>'}</td></tr>`;
+  });
+  $('view').innerHTML = `<div class="bar">
+      <strong>${t.count} salon(s) de test</strong>
+      <span class="muted">dont ${t.deletable} supprimable(s)</span>
+      <button class="danger" ${t.deletable ? '' : 'disabled'}
+        onclick="purge()">Nettoyer</button>
+    </div>` +
+    table(['Salon', 'Historique', ''], rows) +
+    `<p class="note">Chaque exécution de la suite d'intégration crée un salon
+     qu'aucune route ne pouvait supprimer. Deux barrières avant tout effacement :
+     le nom <code>Salon Test &lt;horodatage&gt;</code> <em>et</em> l'absence
+     totale d'historique — un salon réel portant ce nom serait conservé.</p>`;
+}
+
+async function purge() {
+  if (!confirm('Supprimer les salons de test sans historique ?')) return;
+  try {
+    const r = await api('/admin/maintenance/test-data', { method: 'DELETE' });
+    say(`${r.count} salon(s) supprimé(s).`);
+    viewMaint();
+  } catch (e) { say(e.message, true); }
+}
+
+if (token) start(); else logout();
+</script>
+</body>
+</html>

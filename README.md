@@ -502,6 +502,60 @@ l'accueil masque la carte : le reste de l'app fonctionne à l'identique.
 
 ---
 
+## Console d'administration (§9)
+
+Ouvrez **http://localhost:8000/admin** depuis un navigateur. Une page autonome
+servie par l'API elle-même : pas de build, pas de dépendance, pas de second
+projet à faire tourner.
+
+### Qui y accède
+
+Les numéros listés dans `ADMIN_PHONES` (séparés par des virgules), et eux
+seuls. Deux choix expliquent ce fonctionnement :
+
+- **Dans la configuration, pas en base.** Personne ne peut se promouvoir
+  administrateur en manipulant l'API, et retirer un accès ne demande qu'un
+  redémarrage.
+- **Un drapeau `is_admin`, pas un quatrième rôle.** `Role` décrit la place
+  d'un compte *dans un salon* — client, coiffeur, gérant — et toute
+  l'application mobile en dépend. Y ajouter `ADMIN` aurait forcé chaque écran
+  à traiter un cas qui ne le concerne pas. Un administrateur reste donc un
+  client ordinaire dans l'app ; le drapeau n'ouvre que la console.
+
+Le drapeau se recalcule à chaque connexion : retirer un numéro de la liste
+retire l'accès sans toucher à la base. Vérifié en conditions réelles — gérant,
+coiffeur et client reçoivent 403, un visiteur anonyme 401.
+
+### Ce qu'elle permet
+
+**Vue d'ensemble** — salons, comptes, équipes, RDV du jour et de la semaine,
+volume encaissé. Le chiffre d'affaires affiché est celui des salons, pas un
+revenu de la plateforme : les confondre reviendrait à se raconter des
+histoires.
+
+**Salons** — la liste complète avec propriétaire, équipe, historique.
+Suspendre réutilise le statut `closed` existant plutôt que d'en inventer un
+second : deux notions de fermeture divergeraient au premier oubli, et le calcul
+des créneaux n'en connaît qu'une.
+
+**Supprimer est refusé dès qu'il existe le moindre historique** — RDV,
+transaction, avis, reel, clôture, dépense, charge, tséb9a ou mouvement de
+caisse. Effacer un salon qui a encaissé effacerait la paie d'un coiffeur et le
+passé d'un client. Un salon devenu inactif se suspend ; il ne s'efface pas.
+
+**Modération** — un avis se **masque**, jamais ne se supprime : une modération
+erronée doit pouvoir se rattraper, et une note de salon impossible à expliquer
+serait pire que l'avis lui-même. Un reel retiré part aussi de Cloudinary, sinon
+on paierait le stockage d'un contenu que plus personne ne peut voir.
+
+**Maintenance** — chaque exécution de la suite d'intégration crée un salon
+qu'aucune route ne pouvait supprimer ; ils s'accumulaient et remontaient à zéro
+kilomètre dans la recherche. Le nettoyage exige **deux** conditions
+simultanées : le nom `Salon Test <horodatage>` **et** l'absence totale
+d'historique. Le nom seul ne suffirait pas — il reste du texte saisi par un
+humain, et un salon réel qui s'appellerait ainsi ne doit pas disparaître parce
+qu'il en a l'air.
+
 ## Tests
 
 ```bash

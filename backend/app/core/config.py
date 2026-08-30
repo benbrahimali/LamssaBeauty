@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     OTP_RESEND_COOLDOWN_SEC: int = 60
     OTP_DEV_CODE: str | None = "000000"    # dev/CI uniquement ; None en prod
 
+    # Téléphones administrateurs, séparés par des virgules.
+    #
+    # Dans la configuration et non en base : personne ne peut se promouvoir
+    # administrateur en manipulant l'API, et retirer un accès ne demande qu'un
+    # redémarrage.
+    ADMIN_PHONES: str = ""
+
     # ── Réservation (§3.3) ───────────────────────────────────────────────
     SLOT_LOCK_TTL_SEC: int = 30
     SLOT_STEP_MIN: int = 15                # granularité de la grille de créneaux
@@ -113,6 +120,24 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.ENV == "prod"
+
+    @property
+    def admin_phones(self) -> set[str]:
+        """Numéros administrateurs, normalisés comme ceux des comptes."""
+        from app.schemas.auth import normalize_phone
+
+        numeros = set()
+        for brut in self.ADMIN_PHONES.split(","):
+            brut = brut.strip()
+            if not brut:
+                continue
+            try:
+                numeros.add(normalize_phone(brut))
+            except Exception:
+                # Un numéro mal saisi ne doit pas empêcher le serveur de
+                # démarrer : il n'ouvre simplement aucun accès.
+                continue
+        return numeros
 
     def assert_production_ready(self) -> None:
         """Refuse de démarrer en prod avec une configuration de développement.

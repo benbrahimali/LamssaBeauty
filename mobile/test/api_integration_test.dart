@@ -1173,10 +1173,27 @@ void main() {
           reason: 'ouvrir n’est pas irréversible');
     });
 
+    /// Premier jour ouvert **après aujourd'hui**.
+    ///
+    /// Prendre le premier jour disponible tout court fait tomber le test sur
+    /// aujourd'hui : passé 18 h, une plage d'après-midi est déjà écoulée et
+    /// aucun créneau ne remonte — le test échouerait selon l'heure du jour,
+    /// pas selon le code.
+    Future<DayAvailability> prochainJourOuvert() async {
+      final aujourdhui = DateTime.now();
+      final jours = await salons.availability(staffId: staffId);
+      return jours.firstWhere((j) {
+        final d = DateTime.parse(j.isoDate);
+        return j.available &&
+            !(d.year == aujourdhui.year &&
+                d.month == aujourdhui.month &&
+                d.day == aujourdhui.day);
+      });
+    }
+
     test('changer les heures déplace vraiment les créneaux', () async {
       restaurer();
-      final jours = await salons.availability(staffId: staffId);
-      final ouvert = jours.firstWhere((j) => j.available);
+      final ouvert = await prochainJourOuvert();
       final cle = _cleJour(DateTime.parse(ouvert.isoDate));
 
       await admin.updateSalon(salonId, hours: {
@@ -1201,8 +1218,7 @@ void main() {
 
     test('une pause déjeuner vide sa tranche', () async {
       restaurer();
-      final jours = await salons.availability(staffId: staffId);
-      final ouvert = jours.firstWhere((j) => j.available);
+      final ouvert = await prochainJourOuvert();
       final cle = _cleJour(DateTime.parse(ouvert.isoDate));
 
       await admin.updateSalon(salonId, hours: {

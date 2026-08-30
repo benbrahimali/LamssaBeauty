@@ -65,6 +65,15 @@ class User(Document):
     phone: str
     name: str = ""
     role: Role = Role.CLIENT
+
+    # Administrateur de la plateforme.
+    #
+    # Volontairement distinct de `role` : celui-ci décrit la place d'un compte
+    # DANS un salon (client, coiffeur, gérant) et toute l'app en dépend. Y
+    # ajouter un quatrième rôle aurait forcé chaque écran mobile à gérer un cas
+    # qui ne le concerne pas. Un administrateur reste donc un client ordinaire
+    # côté application ; le drapeau n'ouvre que la console.
+    is_admin: bool = False
     locale: str = "fr"                       # ar | fr (§2.5)
     avatar_url: str | None = None
     fcm_tokens: list[str] = []

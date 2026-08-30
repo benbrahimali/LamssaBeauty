@@ -103,6 +103,20 @@ async def optional_user(
         return None
 
 
+async def require_admin(user: User = Depends(current_user)) -> User:
+    """Réservé aux administrateurs de la plateforme.
+
+    Indépendant de `require_role` : l'administration ne se déduit pas de la
+    place d'un compte dans un salon. Un gérant, si important soit-il, n'a
+    aucune raison de voir les salons des autres.
+    """
+    if not user.is_admin:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "Réservé à l'administration"
+        )
+    return user
+
+
 def require_role(*roles: Role):
     """Middleware de rôle (§6) : un STAFF sur /cash/today reçoit 403."""
 
