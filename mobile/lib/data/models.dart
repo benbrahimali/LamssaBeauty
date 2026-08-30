@@ -267,6 +267,78 @@ class Coiffeur {
   }
 }
 
+/// Horaires d'une journée.
+///
+/// `closed` est une décision du gérant, pas une règle de l'app : beaucoup de
+/// salons tunisiens ouvrent 7j/7, et le dimanche fermé n'est qu'un défaut de
+/// création qu'on doit pouvoir défaire.
+class DayHours {
+  const DayHours({
+    this.closed = false,
+    this.open = '09:00',
+    this.close = '19:00',
+    this.breakStart,
+    this.breakEnd,
+  });
+
+  final bool closed;
+  final String open;
+  final String close;
+  final String? breakStart;
+  final String? breakEnd;
+
+  /// Vrai quand une pause est déclarée des deux côtés. Une borne seule ne veut
+  /// rien dire et le serveur l'ignorerait.
+  bool get hasBreak =>
+      (breakStart ?? '').isNotEmpty && (breakEnd ?? '').isNotEmpty;
+
+  DayHours copyWith({
+    bool? closed,
+    String? open,
+    String? close,
+    String? breakStart,
+    String? breakEnd,
+    bool clearBreak = false,
+  }) =>
+      DayHours(
+        closed: closed ?? this.closed,
+        open: open ?? this.open,
+        close: close ?? this.close,
+        breakStart: clearBreak ? null : (breakStart ?? this.breakStart),
+        breakEnd: clearBreak ? null : (breakEnd ?? this.breakEnd),
+      );
+
+  factory DayHours.fromJson(Map<String, dynamic> json) => DayHours(
+        closed: json['closed'] == true,
+        open: json['open']?.toString() ?? '09:00',
+        close: json['close']?.toString() ?? '19:00',
+        breakStart: json['break_start']?.toString(),
+        breakEnd: json['break_end']?.toString(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'closed': closed,
+        'open': open,
+        'close': close,
+        'break_start': hasBreak ? breakStart : null,
+        'break_end': hasBreak ? breakEnd : null,
+      };
+}
+
+/// Semaine complète, un [DayHours] par clé de jour.
+///
+/// Les jours absents de la réponse prennent le défaut plutôt que de disparaître
+/// : l'éditeur doit toujours pouvoir proposer les sept jours.
+Map<String, DayHours> parseWeekHours(dynamic raw) {
+  final source = raw is Map ? raw : const {};
+  return {
+    for (final j in kWeekdays)
+      j.key: source[j.key] is Map
+          ? DayHours.fromJson(Map<String, dynamic>.from(source[j.key] as Map))
+          : DayHours(closed: j.key == 'sun'),
+  };
+}
+
 /// Jours de la semaine, dans l'ordre et avec la clé attendue par l'API.
 ///
 /// La semaine commence lundi : c'est la convention du backend, et un décalage

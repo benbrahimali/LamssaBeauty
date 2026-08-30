@@ -91,6 +91,28 @@ ceux que vous recevez. Elle est donc vide pour un gérant ou un coiffeur qui
 n'a rien réservé pour lui-même, et c'est le comportement attendu : leur
 planning professionnel vit dans l'agenda, pas là.
 
+### Horaires : c'est le gérant qui décide (§3.1, §3.5)
+
+Le dimanche fermé n'est **qu'un défaut de création**, jamais une règle : des
+salons ouvrent 7j/7, et ils doivent pouvoir le déclarer. L'onglet
+« الأوقات » de la gestion du salon donne les sept jours, chacun avec son
+interrupteur ouvert/fermé, ses heures et sa pause facultative.
+
+Le PATCH des horaires **fusionne** au lieu de remplacer. Envoyer le seul
+dimanche remplaçait auparavant tout le dictionnaire : les six autres jours
+disparaissaient et retombaient en silence sur les valeurs par défaut — un
+gérant qui ouvrait son dimanche perdait ses horaires du lundi sans le voir.
+L'app n'envoie donc que le jour modifié, et le serveur garde le reste.
+
+Trois garde-fous côté saisie, parce que le serveur les refuserait de toute
+façon et qu'un message clair vaut mieux qu'une erreur : le format `HH:MM` sur
+24 heures, la fermeture après l'ouverture (une journée vide ne produirait
+aucun créneau), et la pause déclarée des deux côtés ou pas du tout — une borne
+seule ne veut rien dire.
+
+Ces horaires se combinent avec le repos hebdomadaire du coiffeur ci-dessous :
+le salon dit quand il ouvre, le coiffeur quand il travaille.
+
 ### Calendrier : le jour de repos du coiffeur (§3.3, §3.5)
 
 Le salon ouvre six jours sur sept ; le coiffeur, lui, se repose le lundi. Les

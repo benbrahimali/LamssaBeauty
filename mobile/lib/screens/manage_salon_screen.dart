@@ -14,6 +14,7 @@ import '../data/repositories/salon_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/prompt_dialog.dart';
 import '../widgets/reviews_moderation_sheet.dart';
 import '../widgets/team_ranking_sheet.dart';
 import '../widgets/time_off_sheet.dart';
@@ -36,6 +37,11 @@ class ManageSalonScreen extends StatefulWidget {
 class _ManageSalonScreenState extends State<ManageSalonScreen> {
   int _tab = 0;
   List<ServiceItem> _services = const [];
+
+  /// Semaine d'ouverture du salon. Le dimanche fermé n'est qu'un défaut de
+  /// création : beaucoup de salons tunisiens ouvrent 7j/7 et doivent pouvoir
+  /// le déclarer eux-mêmes.
+  Map<String, DayHours> _hours = const {};
   List<Coiffeur> _team = const [];
   List<String> _photos = const [];
   bool _uploading = false;
@@ -68,6 +74,7 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
         _services = results[0] as List<ServiceItem>;
         _team = results[1] as List<Coiffeur>;
         _photos = (results[2] as SalonDetail).salon.photos;
+        _hours = (results[2] as SalonDetail).hours;
         _loading = false;
       });
     } on ApiException catch (e) {
@@ -321,7 +328,8 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
                   : () => switch (_tab) {
                         0 => _editService(),
                         1 => _editStaff(),
-                        _ => _addPhoto(),
+                        2 => _addPhoto(),
+                        _ => null,
                       },
               child: _uploading
                   ? const SizedBox(
@@ -407,11 +415,163 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
     );
   }
 
+  /// Horaires du salon, jour par jour.
+  ///
+  /// Aucun jour n'est fermé d'office : le dimanche l'est seulement par défaut
+  /// à la création, et un salon qui ouvre 7j/7 le rouvre ici. Le serveur
+  /// fusionne les jours envoyés, donc modifier un jour ne touche pas aux
+  /// autres.
+  Widget _hoursList() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+      child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(
+            'الأيّام اللي الصالون مسكّر فيهم تتحدّد من هنا — كان تخدم 7 أيّام، '
+            'حلّ الكل.',
+            style: AppTextStyle.dmSans(size: 12, color: AppColors.sub),
+          ),
+        ),
+        ...kWeekdays.map((jour) {
+          final h = _hours[jour.key] ?? const DayHours();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                    color: h.closed ? AppColors.border : AppColors.gold
+                        .withValues(alpha: 0.35)),
+              ),
+              child: Row(children: [
+                SizedBox(
+                  width: 52,
+                  child: Text(jour.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyle.dmSans(
+                          size: 13, weight: FontWeight.w700)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: h.closed ? null : () => _editDayHours(jour.key, h),
+                    child: Text(
+                      h.closed
+                          ? 'مسكّر'
+                          : '${h.open} – ${h.close}'
+                              '${h.hasBreak ? '  ·  ${h.breakStart}–${h.breakEnd}' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyle.dmSans(
+                        size: 13,
+                        color: h.closed ? AppColors.sub : AppColors.gold,
+                      ),
+                    ),
+                  ),
+                ),
+                Switch(
+                  value: !h.closed,
+                  activeThumbColor: AppColors.gold,
+                  onChanged: (ouvert) =>
+                      _saveDayHours(jour.key, h.copyWith(closed: !ouvert)),
+                ),
+              ]),
+            ),
+          );
+        }),
+      ]),
+    );
+  }
+
+  /// Édite les heures d'un jour ouvert.
+  Future<void> _editDayHours(String cle, DayHours actuel) async {
+    final saisie = await PromptDialog.show(
+      context,
+      title: 'أوقات ${kWeekdays.firstWhere((j) => j.key == cle).label}',
+      message: 'الوقت بصيغة 24 ساعة، مثال 09:00',
+      fields: [
+        PromptField(name: 'open', label: 'الحلّ', initial: actuel.open),
+        PromptField(name: 'close', label: 'السكران', initial: actuel.close),
+        PromptField(
+            name: 'pause_debut',
+            label: 'بداية الراحة (اختياري)',
+            initial: actuel.breakStart ?? ''),
+        PromptField(
+            name: 'pause_fin',
+            label: 'آخر الراحة (اختياري)',
+            initial: actuel.breakEnd ?? ''),
+      ],
+    );
+    if (saisie == null || !mounted) return;
+
+    final ouverture = saisie['open'];
+    final fermeture = saisie['close'];
+    if (!_heureValide(ouverture) || !_heureValide(fermeture)) {
+      showAppSnack(context, 'الوقت لازم يكون على شكل 09:00');
+      return;
+    }
+    if (ouverture.compareTo(fermeture) >= 0) {
+      // Comparaison lexicographique : elle suffit sur du HH:MM zéro-complété,
+      // et elle empêche la journée vide qui ne produirait aucun créneau.
+      showAppSnack(context, 'السكران لازم يكون بعد الحلّ');
+      return;
+    }
+
+    final debut = saisie['pause_debut'];
+    final fin = saisie['pause_fin'];
+    final avecPause = debut.isNotEmpty || fin.isNotEmpty;
+    if (avecPause && (!_heureValide(debut) || !_heureValide(fin))) {
+      showAppSnack(context, 'وقت الراحة لازم يكون كامل ولا فارغ');
+      return;
+    }
+    if (avecPause && debut.compareTo(fin) >= 0) {
+      showAppSnack(context, 'آخر الراحة لازم يكون بعد بدايتها');
+      return;
+    }
+
+    await _saveDayHours(
+      cle,
+      DayHours(
+        closed: false,
+        open: ouverture,
+        close: fermeture,
+        breakStart: avecPause ? debut : null,
+        breakEnd: avecPause ? fin : null,
+      ),
+    );
+  }
+
+  /// `HH:MM` sur 24 heures. Le serveur refuserait le reste, autant le dire ici.
+  bool _heureValide(String v) {
+    final m = RegExp(r'^([01]\d|2[0-3]):([0-5]\d)$').firstMatch(v);
+    return m != null;
+  }
+
+  Future<void> _saveDayHours(String cle, DayHours valeur) async {
+    final avant = _hours;
+    setState(() => _hours = {..._hours, cle: valeur});
+    try {
+      // Un seul jour est envoyé : le serveur fusionne, les six autres restent
+      // tels quels.
+      await _repo.updateSalon(widget.salonId, hours: {cle: valeur});
+      if (mounted) showAppSnack(context, 'الأوقات تبدّلت ✅', success: true);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _hours = avant);
+      showAppSnack(context, e.message);
+    }
+  }
+
   Widget _tabs() {
     final labels = [
       'الخدمات (${_services.length})',
       'الفريق (${_team.length})',
       'التصاور (${_photos.length})',
+      'الأوقات',
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
@@ -457,7 +617,8 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
     return switch (_tab) {
       0 => _servicesList(),
       1 => _teamList(),
-      _ => _photosGrid(),
+      2 => _photosGrid(),
+      _ => _hoursList(),
     };
   }
 

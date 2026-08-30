@@ -57,6 +57,9 @@ class SalonAdminRepository {
     double? monthlyRevenueTarget,
     /// Part du pourboire revenant à l'employé. 100 = tout pour lui.
     double? tipStaffPct,
+    // Horaires jour par jour. Le serveur fusionne : envoyer un seul jour ne
+    // touche pas aux six autres.
+    Map<String, DayHours>? hours,
   }) async {
     final data = await _api.patch('/salons/$salonId', body: {
       if (name != null) 'name': name,
@@ -71,6 +74,8 @@ class SalonAdminRepository {
       if (monthlyRevenueTarget != null)
         'monthly_revenue_target': monthlyRevenueTarget,
       if (tipStaffPct != null) 'tip_staff_pct': tipStaffPct,
+      if (hours != null)
+        'hours': {for (final e in hours.entries) e.key: e.value.toJson()},
     }) as Map<String, dynamic>;
     return Salon.fromDetail(data);
   }

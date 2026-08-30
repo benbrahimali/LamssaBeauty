@@ -55,6 +55,7 @@ class SalonRepository {
           ? null
           : services.map((s) => s.price).reduce((a, b) => a < b ? a : b),
     );
+    final semaine = parseWeekHours(raw['hours']);
     final staff = ((data['staff'] as List?) ?? const [])
         .map((e) => Coiffeur.fromJson(
               Map<String, dynamic>.from(e as Map),
@@ -62,7 +63,8 @@ class SalonRepository {
             ))
         .toList();
 
-    return SalonDetail(salon: salon, staff: staff, services: services);
+    return SalonDetail(
+        salon: salon, staff: staff, services: services, hours: semaine);
   }
 
   /// Profil public d'un coiffeur : identité, services, portfolio, avis (§3.2).
@@ -126,10 +128,16 @@ class SalonDetail {
   final List<Coiffeur> staff;
   final List<ServiceItem> services;
 
+  /// Semaine complète, un [DayHours] par clé de jour. Toujours les sept jours,
+  /// même si le serveur n'en renvoie qu'une partie : l'éditeur du gérant doit
+  /// pouvoir les proposer tous.
+  final Map<String, DayHours> hours;
+
   const SalonDetail({
     required this.salon,
     this.staff = const [],
     this.services = const [],
+    this.hours = const {},
   });
 }
 

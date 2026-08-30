@@ -255,6 +255,14 @@ async def update_salon(body: SalonUpdate, salon: Salon = Depends(owned_salon)):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Fournissez lat ET lng pour déplacer le salon"
         )
+    # Les horaires se modifient jour par jour : remplacer le dictionnaire
+    # entier effacerait les six autres jours, qui retomberaient en silence sur
+    # les valeurs par défaut. Un gérant qui ouvre le dimanche perdrait ainsi
+    # ses horaires du lundi sans le savoir.
+    hours = data.pop("hours", None)
+    if hours is not None:
+        salon.hours = {**salon.hours, **hours}
+
     for field, value in data.items():
         setattr(salon, field, value)
     await salon.save()

@@ -1085,6 +1085,104 @@ void main() {
           reason: 'le coiffeur doit bien travailler quelque part dans la quinzaine');
     });
   });
+
+  // ── Horaires du salon ──────────────────────────────────────────────────
+  //
+  // Le dimanche fermé n'est qu'un défaut de création : un salon qui ouvre
+  // 7j/7 doit pouvoir le déclarer, et un PATCH d'un seul jour ne doit pas
+  // effacer les six autres.
+  group('Horaires du salon (§3.1, §3.5)', () {
+    late String salonId;
+    late String staffId;
+
+    setUp(() async {
+      await login(ownerPhone);
+      salonId = (await auth.me()).ownedSalonId!;
+      staffId = (await salons.detail(salonId)).staff.first.id;
+    });
+
+    /// Rend au salon sa semaine par défaut.
+    void restaurer() => addTearDown(() async {
+          await login(ownerPhone);
+          await admin.updateSalon(salonId, hours: {
+            'mon': const DayHours(),
+            'sun': const DayHours(closed: true),
+          });
+        });
+
+    test('la semaine remonte toujours avec ses sept jours', () async {
+      final detail = await salons.detail(salonId);
+
+      // Un jour manquant empêcherait le gérant de l'ouvrir : il ne serait
+      // affiché nulle part.
+      expect(detail.hours.keys.toSet(),
+          {'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'});
+    });
+
+    test('le gérant ouvre son dimanche', () async {
+      restaurer();
+      await admin.updateSalon(salonId, hours: {
+        'sun': const DayHours(closed: false, open: '10:00', close: '16:00'),
+      });
+
+      final detail = await salons.detail(salonId);
+      expect(detail.hours['sun']!.closed, isFalse);
+      expect(detail.hours['sun']!.open, '10:00');
+    });
+
+    test('modifier un jour n’efface pas les autres', () async {
+      restaurer();
+      await admin.updateSalon(salonId,
+          hours: {'mon': const DayHours(open: '08:00', close: '20:00')});
+      await admin.updateSalon(salonId, hours: {
+        'sun': const DayHours(closed: false, open: '10:00', close: '16:00'),
+      });
+
+      final detail = await salons.detail(salonId);
+      expect(detail.hours['mon']!.open, '08:00',
+          reason: 'le lundi personnalisé doit survivre à l’ouverture du dimanche');
+      expect(detail.hours.length, 7);
+    });
+
+    test('un dimanche ouvert produit de vrais créneaux', () async {
+      restaurer();
+      await admin.updateSalon(salonId, hours: {
+        'sun': const DayHours(closed: false, open: '10:00', close: '16:00'),
+      });
+
+      final jours = await salons.availability(staffId: staffId);
+      final dimanches = jours.where((j) => DateTime.parse(j.isoDate).weekday == 7);
+
+      expect(dimanches, isNotEmpty);
+      expect(dimanches.every((j) => j.reason != DayUnavailability.salonClosed),
+          isTrue,
+          reason: 'le salon est déclaré ouvert : plus aucun « مسكّر »');
+    });
+
+    test('refermer le dimanche le referme vraiment', () async {
+      await admin.updateSalon(
+          salonId, hours: {'sun': const DayHours(closed: false)});
+      await admin.updateSalon(
+          salonId, hours: {'sun': const DayHours(closed: true)});
+
+      final jours = await salons.availability(staffId: staffId);
+      final dimanches = jours.where((j) => DateTime.parse(j.isoDate).weekday == 7);
+
+      expect(dimanches.every((j) => j.reason == DayUnavailability.salonClosed),
+          isTrue,
+          reason: 'ouvrir n’est pas irréversible');
+    });
+
+    test('un salon 7j/7 est légitime', () async {
+      restaurer();
+      await admin.updateSalon(salonId, hours: {
+        for (final j in kWeekdays) j.key: const DayHours(closed: false),
+      });
+
+      final detail = await salons.detail(salonId);
+      expect(detail.hours.values.every((h) => !h.closed), isTrue);
+    });
+  });
 }
 
 /// Clé de jour attendue par l'API — la semaine commence lundi.
