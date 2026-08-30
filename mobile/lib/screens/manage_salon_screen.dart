@@ -422,9 +422,12 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
   /// fusionne les jours envoyés, donc modifier un jour ne touche pas aux
   /// autres.
   Widget _hoursList() {
-    return Padding(
+    // Défilant comme les autres onglets : sept rangées à interrupteur
+    // dépassent la hauteur d'un téléphone ordinaire, et davantage encore avec
+    // une police système agrandie.
+    return ListView(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-      child: Column(children: [
+      children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Text(
@@ -483,7 +486,7 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
             ),
           );
         }),
-      ]),
+      ],
     );
   }
 
