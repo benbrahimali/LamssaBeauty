@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../core/api_exception.dart';
@@ -7,6 +6,7 @@ import '../data/models.dart';
 import '../data/repositories/salon_repository.dart';
 import '../state/booking_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/salon_thumb.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 
@@ -170,20 +170,7 @@ class _BookingScreenState extends State<BookingScreen> {
           border: Border.all(color: AppColors.border),
         ),
         child: Row(children: [
-          Container(
-            width: 52, height: 52,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [
-                widget.salon.color,
-                widget.salon.accent.withValues(alpha: 0.2),
-              ]),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            alignment: Alignment.center,
-            child: Text(widget.salon.initials, style: GoogleFonts.playfairDisplay(
-              fontSize: 18, fontWeight: FontWeight.w900, color: widget.salon.accent,
-            )),
-          ),
+          SalonThumb(salon: widget.salon, size: 52, monogramSize: 18),
           const SizedBox(width: 12),
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

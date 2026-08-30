@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../data/models.dart';
 import '../state/salons_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/salon_thumb.dart';
 import '../widgets/salon_code_sheet.dart';
 import '../core/location.dart';
 import '../widgets/async_states.dart';
@@ -27,12 +28,56 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   static const _tunis = CameraPosition(target: LatLng(36.8190, 10.1658), zoom: 13.5);
 
+  /// Cible de recentrage tant que la carte n'est pas créée.
+  LatLng? _centreVoulu;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<SalonsController>().load();
+      if (!mounted) return;
+      context.read<SalonsController>().load();
+      _localiserAuDemarrage();
     });
+  }
+
+  /// Centre la carte sur l'utilisateur à l'ouverture.
+  ///
+  /// L'écran s'ouvrait sur un centre Tunis figé et cherchait sans position :
+  /// les salons remontaient dans l'ordre du serveur, et la carte montrait un
+  /// quartier où l'utilisateur n'était pas. C'est pourtant l'écran où l'on
+  /// vient précisément pour trouver ce qui est près de soi.
+  ///
+  /// La tentative est silencieuse : elle profite d'une permission déjà
+  /// accordée, mais n'ouvre aucune boîte système. Une demande sans geste se
+  /// fait refuser par réflexe, et un refus définitif ne se rattrape plus — le
+  /// bouton « موقعي » reste là pour le geste explicite.
+  Future<void> _localiserAuDemarrage() async {
+    final salons = context.read<SalonsController>();
+    if (salons.hasPosition) {
+      await _centrer(LatLng(salons.lat!, salons.lng!));
+      return;
+    }
+
+    final position = await resolvePosition(context, silencieux: true);
+    if (!mounted || position == null) return;
+
+    salons.setPosition(position.position.latitude, position.position.longitude);
+    await salons.refresh();
+    if (!mounted) return;
+    await _centrer(
+        LatLng(position.position.latitude, position.position.longitude));
+  }
+
+  /// Déplace la caméra, même si la carte n'est pas encore prête.
+  ///
+  /// La position arrive souvent avant que `onMapCreated` ait été appelé :
+  /// sans mémoriser la cible, le recentrage se perdait et la carte restait
+  /// sur Tunis.
+  Future<void> _centrer(LatLng cible, {double zoom = 14}) async {
+    _centreVoulu = cible;
+    await _mapController?.animateCamera(
+        CameraUpdate.newLatLngZoom(cible, zoom));
   }
 
   @override
@@ -52,10 +97,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
       final salons = context.read<SalonsController>();
       salons.setPosition(position.position.latitude, position.position.longitude);
       await salons.refresh();
-      await _mapController?.animateCamera(CameraUpdate.newLatLngZoom(
-        LatLng(position.position.latitude, position.position.longitude),
-        14,
-      ));
+      if (!mounted) return;
+      await _centrer(
+          LatLng(position.position.latitude, position.position.longitude));
     } finally {
       if (mounted) setState(() => _locating = false);
     }
@@ -274,7 +318,14 @@ class _ExploreScreenState extends State<ExploreScreen> {
           myLocationEnabled: true,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
-          onMapCreated: (controller) => _mapController = controller,
+          onMapCreated: (controller) {
+            _mapController = controller;
+            // La position peut être arrivée avant la carte : on rattrape.
+            final cible = _centreVoulu;
+            if (cible != null) {
+              controller.moveCamera(CameraUpdate.newLatLngZoom(cible, 14));
+            }
+          },
           style: _mapDarkStyle,
         ),
       ),
@@ -339,21 +390,7 @@ class _SalonListCard extends StatelessWidget {
       ),
       padding: const EdgeInsets.all(14),
       child: Row(children: [
-        Container(
-          width: 64, height: 64,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [salon.color, salon.accent.withValues(alpha: 0.2)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          alignment: Alignment.center,
-          child: Text(salon.initials, style: GoogleFonts.playfairDisplay(
-            fontSize: 22, fontWeight: FontWeight.w900, color: salon.accent,
-          )),
-        ),
+        SalonThumb(salon: salon, size: 64, monogramSize: 22),
         const SizedBox(width: 14),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [

@@ -336,6 +336,31 @@ d'hier. Et quand le repli est atteint, il est **signalé** : la création
 affiche « الموقع تقريبي », garde le liseré doré au lieu du vert, et invite à
 poser le point sur la carte — où il redevient exact.
 
+### Une seule vignette de salon (§3.2)
+
+Trois écrans dessinaient la vignette d'un salon chacun de leur côté, et deux
+avaient oublié la photo : **la recherche et le tunnel de réservation**
+affichaient le monogramme même quand le gérant avait mis une vitrine. La photo
+existait bien côté serveur — le gérant croyait son envoi perdu.
+
+`SalonThumb` sert désormais les trois. Le monogramme reste le repli, et il
+prend aussi la place quand le chargement échoue : mieux qu'une icône cassée au
+milieu d'une liste. Sa taille suit celle de la vignette, sans quoi il devient
+illisible en petit format.
+
+### La carte de recherche s'ouvre sur vous (§3.2)
+
+L'écran de recherche s'ouvrait sur un centre Tunis figé et cherchait **sans
+position** : les salons remontaient dans l'ordre du serveur et la carte
+montrait un quartier où l'utilisateur n'était pas. C'est pourtant l'écran où
+l'on vient précisément pour trouver ce qui est près de soi.
+
+La position est demandée à l'ouverture, silencieusement — elle profite d'une
+permission déjà accordée sans ouvrir de boîte système, le bouton « موقعي »
+restant là pour le geste explicite. La position arrive souvent **avant** que
+la carte soit créée : la cible est mémorisée et appliquée dans `onMapCreated`,
+sans quoi le recentrage se perdait et la carte restait sur Tunis.
+
 ### La carte « قريب منك » (§3.2)
 
 C'est le premier contact d'un client avec un salon, et longtemps le plus
