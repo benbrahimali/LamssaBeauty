@@ -96,6 +96,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
   /// Sans salon rattaché, le tableau de bord n'a rien à montrer : on propose
   /// directement l'onboarding (§3.1) au lieu d'une impasse.
   Widget _buildNoSalon() {
+    // Le droit d'ouvrir un salon vient du serveur : l'app ne le déduit pas du
+    // rôle, elle le lit.
+    final autorise = context.watch<AuthController>().canCreateSalon;
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       body: Center(
@@ -109,13 +113,18 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               Text('ما عندكش صالون', style: AppTextStyle.playfair(size: 22)),
               const SizedBox(height: 10),
               Text(
-                'أنشئ صالونك في دقيقة : الاسم، الموقع، الخدمات والفريق.',
+                autorise
+                    ? 'أنشئ صالونك في دقيقة : الاسم، الموقع، الخدمات والفريق.'
+                    : 'باش تحلّ صالون، لازمك حساب مهني. كلّمنا باش نفعّلوهولك.',
                 textAlign: TextAlign.center,
                 style: AppTextStyle.dmSans(size: 14, color: AppColors.sub)
                     .copyWith(height: 1.6),
               ),
               const SizedBox(height: 32),
-              GoldButton(text: 'أنشئ صالوني 🏪', onPressed: _createSalon),
+              // Le bouton ne s'affiche que si le serveur l'accepterait : le
+              // montrer à qui n'y a pas droit ferait tout saisir pour un 403.
+              if (autorise)
+                GoldButton(text: 'أنشئ صالوني 🏪', onPressed: _createSalon),
             ],
           ),
         ),

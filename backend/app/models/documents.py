@@ -61,6 +61,38 @@ DEFAULT_HOURS: dict[str, DayHours] = {
 # ─────────────────────────────────────────────────────────────────────────────
 # Utilisateurs & salons
 # ─────────────────────────────────────────────────────────────────────────────
+def may_open_salon(
+    *,
+    role: Role,
+    pro_access: bool,
+    pro_access_until: datetime | None = None,
+    now: datetime | None = None,
+) -> bool:
+    """Ce compte peut-il ouvrir un salon ?
+
+    La règle ne peut pas reposer sur le rôle seul : on ne devient gérant qu'en
+    créant un salon, donc exiger d'être gérant pour en créer un serait
+    circulaire et plus aucun salon ne pourrait naître. Elle repose sur une
+    capacité portée par le compte — accordée aujourd'hui par l'administration,
+    demain par un abonnement payé.
+
+    Un gérant installé garde le droit quoi qu'il arrive : son salon existe, le
+    lui refuser l'empêcherait seulement d'en ouvrir un second. Lui facturer un
+    abonnement est un sujet ; lui retirer son outil de travail en est un autre.
+
+    Fonction libre plutôt que méthode : elle se teste sans connexion à la base,
+    comme les autres règles du domaine.
+    """
+    if role is Role.OWNER:
+        return True
+    if not pro_access:
+        return False
+    if pro_access_until is None:
+        return True
+    # Un abonnement expiré ne vaut pas mieux qu'aucun abonnement.
+    return pro_access_until > (now or utcnow())
+
+
 class User(Document):
     phone: str
     name: str = ""
@@ -74,11 +106,34 @@ class User(Document):
     # qui ne le concerne pas. Un administrateur reste donc un client ordinaire
     # côté application ; le drapeau n'ouvre que la console.
     is_admin: bool = False
+
+    # Droit d'ouvrir un salon sur la plateforme.
+    #
+    # Volontairement distinct de `role` : le rôle décrit la place d'un compte
+    # DANS un salon (client, coiffeur, gérant), cette capacité décrit l'accès à
+    # l'offre professionnelle. Les confondre rendrait la règle circulaire — on
+    # ne deviendrait gérant qu'en créant un salon, et créer un salon exigerait
+    # d'être gérant : plus aucun salon ne pourrait naître.
+    #
+    # Aujourd'hui accordée par l'administration ; demain par un abonnement
+    # payé. Seule la façon de l'accorder changera, pas le point de contrôle —
+    # d'où la date d'échéance, déjà là pour l'abonnement à venir.
+    pro_access: bool = False
+    pro_access_until: datetime | None = None
     locale: str = "fr"                       # ar | fr (§2.5)
     avatar_url: str | None = None
     fcm_tokens: list[str] = []
     is_active: bool = True
     created_at: datetime = Field(default_factory=utcnow)
+
+    def may_open_salon(self, now: datetime | None = None) -> bool:
+        """Ce compte peut-il ouvrir un salon ? Voir `may_open_salon`."""
+        return may_open_salon(
+            role=self.role,
+            pro_access=self.pro_access,
+            pro_access_until=self.pro_access_until,
+            now=now,
+        )
 
     class Settings:
         name = "users"

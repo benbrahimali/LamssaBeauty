@@ -127,6 +127,10 @@ async def me(user: User = Depends(current_user)):
         "user": _user_out(user),
         "staff_profiles": memberships,
         "owned_salons": [{"id": str(s.id), "name": s.name, "type": s.type} for s in owned],
+        # L'app s'en sert pour montrer ou non « ouvrir un salon ». Le serveur
+        # refuse de toute façon : ce drapeau évite d'offrir un bouton qui mène
+        # à un 403, il ne protège rien à lui seul.
+        "can_create_salon": user.may_open_salon(),
     }
 
 

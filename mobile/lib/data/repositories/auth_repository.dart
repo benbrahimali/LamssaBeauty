@@ -47,6 +47,7 @@ class AuthRepository {
       staffSalonId: profiles.isEmpty ? null : profiles.first['salon_id']?.toString(),
       ownedSalonId: owned.isEmpty ? null : owned.first['id']?.toString(),
       ownedSalonName: owned.isEmpty ? '' : (owned.first['name']?.toString() ?? ''),
+      canCreateSalon: data['can_create_salon'] == true,
     );
   }
 
@@ -88,12 +89,20 @@ class AccountContext {
   final String? ownedSalonId;
   final String ownedSalonName;
 
+  /// Ce compte a-t-il le droit d'ouvrir un salon ?
+  ///
+  /// Décidé par le serveur, jamais déduit du rôle ici : l'app ne s'en sert que
+  /// pour éviter d'offrir un bouton qui mènerait à un 403. C'est le serveur qui
+  /// protège, pas cet indicateur.
+  final bool canCreateSalon;
+
   const AccountContext({
     required this.user,
     this.staffId,
     this.staffSalonId,
     this.ownedSalonId,
     this.ownedSalonName = '',
+    this.canCreateSalon = false,
   });
 
   /// Le salon sur lequel travailler : celui qu'on possède, sinon celui où l'on est employé.

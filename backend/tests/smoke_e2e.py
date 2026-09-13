@@ -17,7 +17,7 @@ os.environ.setdefault("MONGO_DB", "lamssa_smoke")
 from app.core.db import init_db, redis  # noqa: E402
 from app.core.timeutils import combine_local, to_local, utcnow  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models.documents import ALL_DOCUMENTS  # noqa: E402
+from app.models.documents import ALL_DOCUMENTS, User  # noqa: E402
 
 # Sous Git Bash / cmd.exe la sortie est en cp1252 et les coches font planter le
 # script avant le premier test. On force l'UTF-8 quand c'est possible.
@@ -58,18 +58,31 @@ async def main() -> int:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         # ── 1. Onboarding gérant ─────────────────────────────────────────────
         owner = await token_for(c, "+21699111111", "Rania")
-        resp = await c.post(
-            "/api/v1/salons",
-            headers=auth(owner),
-            json={
-                "name": "Salon Smoke",
-                "type": "mixte",
-                "lat": 36.8065,
-                "lng": 10.1815,
-                "address": "Tunis Centre",
-                "cancellation_window_h": 2,
-            },
+        nouveau_salon = {
+            "name": "Salon Smoke",
+            "type": "mixte",
+            "lat": 36.8065,
+            "lng": 10.1815,
+            "address": "Tunis Centre",
+            "cancellation_window_h": 2,
+        }
+
+        # Un compte neuf est un client : ouvrir un salon lui est fermé tant
+        # qu'il n'a pas d'accès professionnel.
+        resp = await c.post("/api/v1/salons", headers=auth(owner), json=nouveau_salon)
+        check(
+            "Création refusée sans compte professionnel",
+            resp.status_code == 403,
+            str(resp.status_code),
         )
+
+        # L'administration l'accorde — demain ce sera un abonnement payé, le
+        # point de contrôle ne changera pas.
+        compte = await User.find_one(User.phone == "+21699111111")
+        compte.pro_access = True
+        await compte.save()
+
+        resp = await c.post("/api/v1/salons", headers=auth(owner), json=nouveau_salon)
         check("Création du salon", resp.status_code == 201, str(resp.status_code))
         salon_id = resp.json()["id"]
 

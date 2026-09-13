@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 
 from app.core.config import settings
 from app.core.deps import get_salon, owned_salon
-from app.core.security import current_user
+from app.core.security import require_pro_access, current_user
 from app.core.timeutils import TZ, day_key, parse_hhmm, to_local, utcnow
 from app.models.documents import (
     DEFAULT_HOURS,
@@ -190,8 +190,14 @@ async def _salon_detail(salon: Salon):
 # Onboarding & administration du salon (§3.1, §3.5)
 # ─────────────────────────────────────────────────────────────────────────────
 @router.post("", status_code=201, summary="Créer son salon (onboarding gérant)")
-async def create_salon(body: SalonCreate, user: User = Depends(current_user)):
-    """Créer un salon promeut automatiquement l'utilisateur au rôle OWNER."""
+async def create_salon(body: SalonCreate, user: User = Depends(require_pro_access)):
+    """Créer un salon promeut automatiquement l'utilisateur au rôle OWNER.
+
+    L'accès est gardé par la capacité professionnelle du compte, pas par son
+    rôle : un client ou un coiffeur employé est refusé en 403, et le premier
+    salon d'un futur gérant reste possible — ce qu'un garde sur `Role.OWNER`
+    aurait rendu impossible.
+    """
     from datetime import timedelta
 
     salon = Salon(

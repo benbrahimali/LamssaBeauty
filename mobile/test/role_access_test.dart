@@ -117,8 +117,27 @@ void main() {
 /// double — et le promouvait gérant, puisque le serveur promeut sur création.
 void _testsInscriptionPro() {
   group('Inscription professionnelle', () {
-    test('sans salon ni poste, on vient bien inscrire un salon', () {
-      expect(AuthController.proLandingFor(), ProLanding.createSalon);
+    test('un client sans compte professionnel ne va pas à la création', () {
+      // Le serveur refuserait : lui montrer le formulaire le ferait tout
+      // saisir pour rien.
+      expect(AuthController.proLandingFor(), ProLanding.proLocked);
+    });
+
+    test('un compte professionnel autorisé va bien à la création', () {
+      expect(
+        AuthController.proLandingFor(canCreateSalon: true),
+        ProLanding.createSalon,
+        reason: 'c’est le seul chemin par lequel un nouveau gérant arrive',
+      );
+    });
+
+    test('un coiffeur employé reste dans son espace, même autorisé', () {
+      // Il travaille déjà quelque part : le tunnel d'inscription ne doit pas
+      // le détourner vers la création d'un second salon.
+      expect(
+        AuthController.proLandingFor(staffId: 'staff1', canCreateSalon: true),
+        ProLanding.staffSpace,
+      );
     });
 
     test('un employé va dans son espace, il n’a rien à créer', () {
@@ -127,6 +146,17 @@ void _testsInscriptionPro() {
         ProLanding.staffSpace,
         reason: 'son salon existe déjà — en créer un le promouvrait gérant',
       );
+    });
+
+    test('la création n’est jamais proposée sans autorisation', () {
+      // Le pare-feu côté app. Le serveur refuse de toute façon, mais un bouton
+      // qui mène à un 403 est une promesse non tenue.
+      for (final staff in [null, 'staff1']) {
+        expect(
+          AuthController.proLandingFor(staffId: staff),
+          isNot(ProLanding.createSalon),
+        );
+      }
     });
 
     test('un gérant déjà installé n’est pas renvoyé à la création', () {
@@ -153,7 +183,10 @@ void _testsInscriptionPro() {
       ]) {
         expect(
           AuthController.proLandingFor(
-              ownedSalonId: ctx.salon, staffId: ctx.staff),
+            ownedSalonId: ctx.salon,
+            staffId: ctx.staff,
+            canCreateSalon: true,
+          ),
           isNot(ProLanding.createSalon),
         );
       }

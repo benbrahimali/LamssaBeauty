@@ -510,6 +510,42 @@ l'accueil masque la carte : le reste de l'app fonctionne à l'identique.
 
 ---
 
+## Qui peut ouvrir un salon (§2.5, §3.1)
+
+La règle ne peut pas reposer sur le rôle. On ne devient gérant **qu'en créant
+un salon** ; exiger d'être gérant pour en créer un serait circulaire et plus
+aucun salon ne pourrait naître. Elle repose donc sur une capacité portée par le
+compte, `pro_access`, distincte de `role` :
+
+| Compte | `POST /salons` |
+|---|---|
+| Client ordinaire | **403** |
+| Coiffeur employé | **403** |
+| Client ou coiffeur avec accès professionnel | 201, puis promu OWNER |
+| Gérant installé | 201 — il peut ouvrir un second salon |
+
+**Le serveur refuse, pas seulement l'écran.** Cacher le bouton dans l'app ne
+protège rien : l'API reste appelable directement. La garde est
+`require_pro_access` sur la route ; `can_create_salon` remonte dans
+`/auth/me` uniquement pour éviter d'offrir un bouton qui mènerait à un 403.
+
+**Être employé ne promeut jamais gérant.** `add_staff` passe un client à
+`STAFF`, jamais à `OWNER`, et un refus de création ne change aucun rôle —
+vérifié par un test dédié.
+
+**Un gérant installé garde son droit**, même abonnement expiré. Son salon
+existe : le lui couper ne le supprimerait pas, cela l'empêcherait seulement
+d'en ouvrir un de plus. Lui facturer un abonnement est un sujet ; lui retirer
+son outil de travail en est un autre.
+
+### Prêt pour l'abonnement, sans le payer aujourd'hui
+
+L'accès s'accorde depuis la console (`PATCH /admin/users/{id}/pro-access`),
+avec une échéance facultative en jours. Quand le paiement arrivera, il
+alimentera ces deux champs — `pro_access` et `pro_access_until` — sans toucher
+au point de contrôle. `may_open_salon` reste une fonction pure, testable sans
+base, comme les autres règles du domaine.
+
 ## Console d'administration (§9)
 
 Ouvrez **http://localhost:8000/admin** depuis un navigateur. Une page autonome

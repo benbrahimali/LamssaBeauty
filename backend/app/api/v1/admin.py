@@ -228,11 +228,48 @@ async def list_users(
                 "name": u.name,
                 "role": u.role,
                 "is_admin": u.is_admin,
+                "pro_access": u.pro_access,
+                "pro_access_until": u.pro_access_until,
+                "may_open_salon": u.may_open_salon(),
                 "locale": u.locale,
             }
             for u in users
         ],
         "count": len(users),
+    }
+
+
+@router.patch("/users/{user_id}/pro-access", summary="Accorder ou retirer l'accès professionnel")
+async def set_pro_access(
+    user_id: PydanticObjectId,
+    granted: bool,
+    days: int | None = Query(default=None, ge=1, le=3650),
+    _: User = Depends(require_admin),
+):
+    """Le droit d'ouvrir un salon.
+
+    C'est aujourd'hui le seul chemin : un abonnement payé prendra le relais
+    plus tard sans changer ce point de contrôle. `days` pose une échéance —
+    laissez-le vide pour un accès sans terme.
+
+    Retirer l'accès n'enlève rien à un gérant déjà installé : il possède son
+    salon, et `may_open_salon` le reconnaît par son rôle. Cela l'empêche
+    seulement d'en ouvrir un de plus.
+    """
+    compte = await User.get(user_id)
+    if not compte:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compte introuvable")
+
+    compte.pro_access = granted
+    compte.pro_access_until = (
+        utcnow() + timedelta(days=days) if granted and days else None
+    )
+    await compte.save()
+    return {
+        "id": str(compte.id),
+        "pro_access": compte.pro_access,
+        "pro_access_until": compte.pro_access_until,
+        "may_open_salon": compte.may_open_salon(),
     }
 
 

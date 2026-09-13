@@ -103,6 +103,26 @@ async def optional_user(
         return None
 
 
+async def require_pro_access(user: User = Depends(current_user)) -> User:
+    """Réservé aux comptes autorisés à ouvrir un salon.
+
+    Cacher le bouton côté application ne protège rien : l'API reste appelable
+    directement. Un client ou un coiffeur employé qui poste sur /salons doit
+    être refusé ici, pas seulement dans l'interface.
+
+    La capacité vit sur le compte et non sur le rôle — voir
+    `User.may_open_salon`, qui explique pourquoi la confondre avec le rôle
+    rendrait la règle circulaire.
+    """
+    if not user.may_open_salon():
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Ouvrir un salon demande un compte professionnel. "
+            "Contactez LAMSSA pour activer le vôtre.",
+        )
+    return user
+
+
 async def require_admin(user: User = Depends(current_user)) -> User:
     """Réservé aux administrateurs de la plateforme.
 

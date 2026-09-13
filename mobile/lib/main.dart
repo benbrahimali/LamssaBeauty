@@ -218,7 +218,10 @@ class _AppShellState extends State<_AppShell> {
   void _orienterProfessionnel() {
     final ctx = _auth.context;
     switch (AuthController.proLandingFor(
-        ownedSalonId: ctx?.ownedSalonId, staffId: ctx?.staffId)) {
+      ownedSalonId: ctx?.ownedSalonId,
+      staffId: ctx?.staffId,
+      canCreateSalon: ctx?.canCreateSalon ?? false,
+    )) {
       case ProLanding.ownerSpace:
         break;   // il est déjà chez lui
 
@@ -234,6 +237,18 @@ class _AppShellState extends State<_AppShell> {
           Navigator.of(context).push(MaterialPageRoute(
             builder: (_) => const CreateSalonScreen(),
           ));
+        });
+
+      case ProLanding.proLocked:
+        // Le serveur refuserait la création : lui montrer le formulaire le
+        // ferait tout saisir pour rien. On explique, il reste sur l'espace
+        // client — un compte utilisable vaut mieux qu'une impasse.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showAppSnack(
+            context,
+            'باش تحلّ صالون، لازمك حساب مهني — كلّمنا باش نفعّلوهولك',
+          );
         });
     }
   }

@@ -20,6 +20,9 @@ enum ProLanding {
 
   /// Il y travaille sans le posséder : son espace coiffeur, pas une création.
   staffSpace,
+
+  /// Ni salon, ni poste, ni compte professionnel : la création lui est fermée.
+  proLocked,
 }
 
 /// Session courante : qui est connecté, avec quel rôle, sur quel salon.
@@ -45,6 +48,9 @@ class AuthController extends ChangeNotifier {
   AuthStatus get status => _status;
   AppUser? get user => _context?.user;
   AccountContext? get context => _context;
+
+  /// Vrai quand le serveur autorise ce compte à ouvrir un salon.
+  bool get canCreateSalon => _context?.canCreateSalon ?? false;
   bool get busy => _busy;
   String? get error => _error;
 
@@ -72,10 +78,17 @@ class AuthController extends ChangeNotifier {
   /// envoyer tous deux vers la création faisait créer au second un salon en
   /// double — et le promouvait gérant au passage, puisque le serveur promeut
   /// sur création. Un employé n'a aucun salon à créer : il en a déjà un.
-  static ProLanding proLandingFor({String? ownedSalonId, String? staffId}) {
+  static ProLanding proLandingFor({
+    String? ownedSalonId,
+    String? staffId,
+    bool canCreateSalon = false,
+  }) {
     if (ownedSalonId != null) return ProLanding.ownerSpace;
     if (staffId != null) return ProLanding.staffSpace;
-    return ProLanding.createSalon;
+    // Ouvrir un salon demande un compte professionnel. Proposer le formulaire
+    // à qui n'y a pas droit le mènerait à un refus du serveur après avoir tout
+    // saisi — autant le dire avant.
+    return canCreateSalon ? ProLanding.createSalon : ProLanding.proLocked;
   }
 
   static List<AppRole> rolesFor({String? ownedSalonId, String? staffId}) => [

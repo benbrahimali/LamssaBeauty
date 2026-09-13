@@ -70,6 +70,16 @@ void main() {
   /// impose un délai de 60 s entre deux envois, ce qui ferait échouer la suite.
   Future<void> login(String phone) => auth.verifyOtp(phone: phone, code: devCode);
 
+  /// Accorde l'accès professionnel à un compte, comme le ferait la console.
+  Future<void> accorderAccesPro(String userId) async {
+    final adminApi = ApiClient(TokenStore());
+    addTearDown(adminApi.dispose);
+    await AuthRepository(adminApi).verifyOtp(phone: ownerPhone, code: devCode);
+    await adminApi.patch('/admin/users/$userId/pro-access',
+        query: {'granted': true});
+  }
+
+
   /// Premiers créneaux libres sur les 7 prochains jours.
   ///
   /// Viser un J+n fixe rend le test dépendant du jour de la semaine : le
@@ -440,6 +450,10 @@ void main() {
 
       final user = await auth.verifyOtp(phone: ownerPhone, code: devCode);
       expect(user.role, AppRole.client, reason: 'compte neuf = client');
+
+      // Ouvrir un salon demande désormais un compte professionnel. C'est le
+      // parcours réel : l'administration l'accorde, puis le gérant s'installe.
+      await accorderAccesPro(user.id);
 
       final salon = await admin.createSalon(
         name: 'Salon Test $stamp',
@@ -1265,6 +1279,69 @@ void main() {
 
       final detail = await salons.detail(salonId);
       expect(detail.hours.values.every((h) => !h.closed), isTrue);
+    });
+  });
+
+  // ── Qui peut ouvrir un salon ───────────────────────────────────────────
+  //
+  // Cacher le bouton dans l'app ne protège rien : l'API reste appelable
+  // directement. Ces trois cas vérifient le refus là où il compte.
+  group('Ouverture d’un salon (§2.5, §3.1)', () {
+    const salonNeuf = {
+      'name': 'Salon Sans Droit',
+      'type': 'barbershop',
+      'lat': 36.8065,
+      'lng': 10.1815,
+    };
+
+    Future<int> tenterCreation(String phone) async {
+      final api = ApiClient(TokenStore());
+      addTearDown(api.dispose);
+      await AuthRepository(api).verifyOtp(phone: phone, code: devCode);
+      try {
+        await api.post('/salons', body: salonNeuf);
+        return 201;
+      } on ApiException catch (e) {
+        return e.statusCode;
+      }
+    }
+
+    test('un client est refusé par le serveur, pas seulement par l’écran',
+        () async {
+      expect(await tenterCreation(clientPhone), 403);
+    });
+
+    test('un coiffeur employé est refusé lui aussi', () async {
+      // Travailler dans un salon n'a jamais donné le droit d'en ouvrir un.
+      expect(await tenterCreation(staffPhone), 403);
+    });
+
+    test('un coiffeur refusé n’est pas promu gérant au passage', () async {
+      await tenterCreation(staffPhone);
+
+      final api = ApiClient(TokenStore());
+      addTearDown(api.dispose);
+      final repo = AuthRepository(api);
+      await repo.verifyOtp(phone: staffPhone, code: devCode);
+
+      expect((await repo.me()).user.role, AppRole.coiffeur,
+          reason: 'un refus ne doit rien changer au rôle');
+    });
+
+    test('un gérant installé peut ouvrir un second salon', () async {
+      final api = ApiClient(TokenStore());
+      addTearDown(api.dispose);
+      await AuthRepository(api).verifyOtp(phone: ownerPhone, code: devCode);
+
+      final cree = await api.post('/salons', body: {
+        ...salonNeuf,
+        'name': 'Second Salon ${DateTime.now().millisecondsSinceEpoch}',
+      }) as Map<String, dynamic>;
+
+      expect(cree['id'], isNotNull);
+
+      // Le test nettoie ce qu'il a créé : ce salon n'a aucun historique.
+      await api.delete('/admin/salons/${cree['id']}');
     });
   });
 }
