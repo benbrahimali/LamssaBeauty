@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # redémarrage.
     ADMIN_PHONES: str = ""
 
+    # Secret partagé avec le service de cron qui remplace Celery beat sur un
+    # hébergement sans worker (Render gratuit). Vide = la route est désactivée :
+    # sans secret, n'importe qui pourrait déclencher l'envoi des rappels.
+    CRON_SECRET: str = ""
+
     # ── Réservation (§3.3) ───────────────────────────────────────────────
     SLOT_LOCK_TTL_SEC: int = 30
     SLOT_STEP_MIN: int = 15                # granularité de la grille de créneaux

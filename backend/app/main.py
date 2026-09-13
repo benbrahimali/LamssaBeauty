@@ -18,6 +18,7 @@ from app.api.v1 import (
     auth,
     bookings,
     cash,
+    internal,
     notifications,
     payments,
     portfolio,
@@ -98,6 +99,8 @@ app.include_router(reels.router, prefix=f"{V1}/reels", tags=["reels"])
 app.include_router(notifications.router, prefix=f"{V1}/notifications", tags=["notifications"])
 app.include_router(style_dna.router, prefix=f"{V1}/style-dna", tags=["style dna"])
 app.include_router(admin.router, prefix=f"{V1}/admin", tags=["administration"])
+# Déclenchée par un cron externe, protégée par secret : absente de la doc publique.
+app.include_router(internal.router, prefix=f"{V1}/internal", include_in_schema=False)
 
 # En dev, les médias uploadés sont servis depuis le disque ; en prod ils vont sur S3/R2.
 os.makedirs("./media", exist_ok=True)
