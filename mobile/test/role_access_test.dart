@@ -9,6 +9,8 @@ import 'package:lamssa/state/auth_controller.dart';
 /// afficher un espace de plus produirait des 403, un de moins cacherait une
 /// fonctionnalité payée.
 void main() {
+  _testsInscriptionPro();
+
   group('Espaces accordés', () {
     test('un client n’a que son espace client', () {
       expect(AuthController.rolesFor(), [AppRole.client]);
@@ -102,6 +104,58 @@ void main() {
             );
           }
         }
+      }
+    });
+  });
+}
+
+/// Destination après une inscription « professionnelle » (§2.5, §3.1).
+///
+/// Le bouton « عندي صالون » est vrai pour deux personnes très différentes : le
+/// gérant qui vient inscrire son établissement, et le coiffeur qui y travaille.
+/// Les envoyer tous deux vers la création faisait créer au second un salon en
+/// double — et le promouvait gérant, puisque le serveur promeut sur création.
+void _testsInscriptionPro() {
+  group('Inscription professionnelle', () {
+    test('sans salon ni poste, on vient bien inscrire un salon', () {
+      expect(AuthController.proLandingFor(), ProLanding.createSalon);
+    });
+
+    test('un employé va dans son espace, il n’a rien à créer', () {
+      expect(
+        AuthController.proLandingFor(staffId: 'staff1'),
+        ProLanding.staffSpace,
+        reason: 'son salon existe déjà — en créer un le promouvrait gérant',
+      );
+    });
+
+    test('un gérant déjà installé n’est pas renvoyé à la création', () {
+      expect(
+        AuthController.proLandingFor(ownedSalonId: 'salon1'),
+        ProLanding.ownerSpace,
+        reason: 'sinon il créerait un second salon',
+      );
+    });
+
+    test('gérant ET employé : la propriété prime', () {
+      // Un gérant est souvent aussi coiffeur dans son propre salon.
+      expect(
+        AuthController.proLandingFor(ownedSalonId: 'salon1', staffId: 'staff1'),
+        ProLanding.ownerSpace,
+      );
+    });
+
+    test('la création n’est jamais proposée à qui a déjà un salon', () {
+      for (final ctx in [
+        (salon: 'salon1', staff: null),
+        (salon: 'salon1', staff: 'staff1'),
+        (salon: null, staff: 'staff1'),
+      ]) {
+        expect(
+          AuthController.proLandingFor(
+              ownedSalonId: ctx.salon, staffId: ctx.staff),
+          isNot(ProLanding.createSalon),
+        );
       }
     });
   });

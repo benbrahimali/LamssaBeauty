@@ -211,16 +211,30 @@ class _AppShellState extends State<_AppShell> {
     });
     _refreshForSession();
 
-    // Un gérant qui vient de créer son compte n'a encore aucun salon : on
-    // l'emmène droit à la création plutôt que sur un accueil de client, où
-    // il chercherait longtemps.
-    if (wasPro && _auth.context?.ownedSalonId == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => const CreateSalonScreen(),
-        ));
-      });
+    if (wasPro) _orienterProfessionnel();
+  }
+
+  /// Envoie l'inscrit « professionnel » là où il a affaire.
+  void _orienterProfessionnel() {
+    final ctx = _auth.context;
+    switch (AuthController.proLandingFor(
+        ownedSalonId: ctx?.ownedSalonId, staffId: ctx?.staffId)) {
+      case ProLanding.ownerSpace:
+        break;   // il est déjà chez lui
+
+      case ProLanding.staffSpace:
+        _auth.switchView(AppRole.coiffeur);
+        setState(() => _tab = tabsFor(_auth.role).first);
+
+      case ProLanding.createSalon:
+        // L'écran reste refermable : s'inscrire n'oblige personne à créer un
+        // salon dans la foulée.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const CreateSalonScreen(),
+          ));
+        });
     }
   }
 

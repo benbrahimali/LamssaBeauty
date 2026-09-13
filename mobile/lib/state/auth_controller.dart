@@ -10,6 +10,18 @@ import '../data/repositories/auth_repository.dart';
 
 enum AuthStatus { unknown, loggedOut, loggedIn }
 
+/// Destination après une inscription « professionnelle ».
+enum ProLanding {
+  /// Ni salon ni poste : c'est bien un gérant qui vient s'inscrire.
+  createSalon,
+
+  /// Il possède déjà un salon — le renvoyer à la création en créerait un second.
+  ownerSpace,
+
+  /// Il y travaille sans le posséder : son espace coiffeur, pas une création.
+  staffSpace,
+}
+
 /// Session courante : qui est connecté, avec quel rôle, sur quel salon.
 class AuthController extends ChangeNotifier {
   AuthController(this._api, this._repo, this._push) {
@@ -53,6 +65,19 @@ class AuthController extends ChangeNotifier {
   /// possession d'un salon ou d'un profil coiffeur qui ouvre un espace,
   /// exactement comme le backend en décide. Afficher les autres ne produirait
   /// que des 403.
+  /// Où atterrit quelqu'un qui a choisi « عندي صالون » à l'inscription.
+  ///
+  /// Le bouton est vrai pour deux personnes très différentes : le gérant qui
+  /// vient inscrire son établissement, et le coiffeur qui y travaille. Les
+  /// envoyer tous deux vers la création faisait créer au second un salon en
+  /// double — et le promouvait gérant au passage, puisque le serveur promeut
+  /// sur création. Un employé n'a aucun salon à créer : il en a déjà un.
+  static ProLanding proLandingFor({String? ownedSalonId, String? staffId}) {
+    if (ownedSalonId != null) return ProLanding.ownerSpace;
+    if (staffId != null) return ProLanding.staffSpace;
+    return ProLanding.createSalon;
+  }
+
   static List<AppRole> rolesFor({String? ownedSalonId, String? staffId}) => [
         AppRole.client,
         if (ownedSalonId != null) AppRole.owner,
