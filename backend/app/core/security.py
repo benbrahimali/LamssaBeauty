@@ -117,8 +117,8 @@ async def require_pro_access(user: User = Depends(current_user)) -> User:
     if not user.may_open_salon():
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            "Ouvrir un salon demande un compte professionnel. "
-            "Contactez LAMSSA pour activer le vôtre.",
+            "Ouvrir un salon demande un compte professionnel : "
+            "inscrivez-vous en choisissant « عندي صالون ».",
         )
     return user
 

@@ -5,11 +5,12 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 
 from app.core.config import settings
-from app.core.deps import get_salon, owned_salon
-from app.core.security import require_pro_access, current_user
+from app.core.deps import can_see_salon, get_salon, owned_salon
+from app.core.security import current_user, optional_user, require_pro_access
 from app.core.timeutils import TZ, day_key, parse_hhmm, to_local, utcnow
 from app.models.documents import (
     DEFAULT_HOURS,
+    PUBLIC_SALON_FILTER,
     Booking,
     GeoPoint,
     Review,
@@ -21,10 +22,12 @@ from app.models.documents import (
 )
 from app.models.enums import (
     ACTIVE_BOOKING_STATUSES,
+    NotificationType,
     ReviewStatus,
     Role,
     SalonStatus,
     SalonType,
+    SalonVerification,
     SubscriptionStatus,
 )
 from app.schemas.salon import (
@@ -38,6 +41,7 @@ from app.schemas.salon import (
     TimeOffCreate,
 )
 from app.services import public_code
+from app.services.notification_service import notify_many
 from app.services.storage_service import save_image
 
 router = APIRouter()
@@ -102,7 +106,8 @@ async def search_salons(
     limit: int = Query(50, ge=1, le=100),
 ):
     """Recherche géo 2dsphere + filtres type/note/distance/« disponible maintenant »."""
-    match: dict = {"status": SalonStatus.OPEN.value}
+    # Un salon en attente de vérification ne sort ni dans la liste ni sur la carte.
+    match: dict = {"status": SalonStatus.OPEN.value, **PUBLIC_SALON_FILTER}
     if type:
         match["type"] = type.value
     if min_rating:
@@ -145,7 +150,7 @@ async def search_salons(
     "/code/{code}",
     summary="Fiche salon par code public (QR en vitrine, partage WhatsApp)",
 )
-async def salon_by_code(code: str):
+async def salon_by_code(code: str, viewer: User | None = Depends(optional_user)):
     """Résout le code imprimé sur le QR. Public : c'est tout l'intérêt du partage.
 
     Déclarée avant `/{salon_id}` : sinon FastAPI ferait correspondre « code » à
@@ -153,14 +158,20 @@ async def salon_by_code(code: str):
     """
     cleaned = public_code.normalize(code)
     salon = await Salon.find_one(Salon.public_code == cleaned)
-    if salon is None:
+    if salon is None or not await can_see_salon(salon, viewer):
         raise HTTPException(404, "Aucun salon pour ce code")
     return await _salon_detail(salon)
 
 
 @router.get("/{salon_id}", summary="Fiche salon (photos, équipe, services, avis)")
-async def salon_detail(salon_id: PydanticObjectId):
-    return await _salon_detail(await get_salon(salon_id))
+async def salon_detail(
+    salon_id: PydanticObjectId, viewer: User | None = Depends(optional_user)
+):
+    salon = await get_salon(salon_id)
+    # 404 et non 403 : un salon en préparation n'existe pas encore pour le public.
+    if not await can_see_salon(salon, viewer):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Salon introuvable")
+    return await _salon_detail(salon)
 
 
 async def _salon_detail(salon: Salon):
@@ -197,6 +208,10 @@ async def create_salon(body: SalonCreate, user: User = Depends(require_pro_acces
     rôle : un client ou un coiffeur employé est refusé en 403, et le premier
     salon d'un futur gérant reste possible — ce qu'un garde sur `Role.OWNER`
     aurait rendu impossible.
+
+    Le salon naît en attente de vérification : le gérant le prépare aussitôt
+    (services, équipe, horaires, photos), les clients ne le voient qu'après
+    validation dans la console d'administration.
     """
     from datetime import timedelta
 
@@ -214,8 +229,19 @@ async def create_salon(body: SalonCreate, user: User = Depends(require_pro_acces
         cancellation_window_h=body.cancellation_window_h,
         subscription_status=SubscriptionStatus.TRIAL,
         trial_ends_at=utcnow() + timedelta(days=settings.TRIAL_DAYS),
+        verification_status=SalonVerification.PENDING,
     )
     await public_code.assign(salon)
+
+    admins = await User.find(User.is_admin == True).to_list()  # noqa: E712
+    await notify_many(
+        [a.id for a in admins],
+        NotificationType.SALON_PENDING,
+        "Salon à valider",
+        f"« {salon.name} »" + (f" ({salon.city})" if salon.city else "")
+        + " attend votre validation.",
+        {"salon_id": str(salon.id)},
+    )
 
     if user.role is not Role.OWNER:
         user.role = Role.OWNER

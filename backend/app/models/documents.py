@@ -21,6 +21,7 @@ from app.models.enums import (
     Role,
     SalonStatus,
     SalonType,
+    SalonVerification,
     SubscriptionStatus,
 )
 
@@ -91,6 +92,54 @@ def may_open_salon(
         return True
     # Un abonnement expiré ne vaut pas mieux qu'aucun abonnement.
     return pro_access_until > (now or utcnow())
+
+
+def may_self_activate_pro(*, has_staff_profile: bool) -> bool:
+    """Un compte peut-il se déclarer professionnel lui-même (« عندي صالون ») ?
+
+    Le gérant ouvre son salon dès l'inscription : c'est la vérification du
+    salon, pas l'accès au formulaire, qui protège les clients. Un coiffeur
+    employé en est exclu — travailler dans un salon ne fait pas de lui le
+    gérant d'un autre, et le laisser s'activer seul viderait la règle.
+    """
+    return not has_staff_profile
+
+
+#: Statuts qui tiennent un salon hors de la vue du public.
+HIDDEN_VERIFICATION = (SalonVerification.PENDING.value, SalonVerification.REJECTED.value)
+
+#: Filtre Mongo des salons visibles du public.
+#:
+#: `$nin` plutôt que `== "verified"` : un salon antérieur à la vérification n'a
+#: pas le champ, et il doit rester visible.
+PUBLIC_SALON_FILTER = {"verification_status": {"$nin": list(HIDDEN_VERIFICATION)}}
+
+
+def salon_is_public(verification_status: SalonVerification | str | None) -> bool:
+    """Même règle que `PUBLIC_SALON_FILTER`, pour un salon déjà chargé."""
+    return verification_status not in HIDDEN_VERIFICATION
+
+
+def salons_hidden_from(
+    hidden: list[tuple[PydanticObjectId, PydanticObjectId]],
+    *,
+    viewer_id: PydanticObjectId | None,
+    is_admin: bool = False,
+    member_of: set[PydanticObjectId] = frozenset(),
+) -> list[PydanticObjectId]:
+    """Parmi les salons non vérifiés `(salon_id, owner_id)`, ceux que ce
+    visiteur ne doit pas voir.
+
+    Le gérant, son équipe et l'administration voient le salon en préparation :
+    sans cela, le gérant ne pourrait pas vérifier ce qu'il met en place.
+    """
+    if is_admin:
+        return []
+    return [
+        salon_id
+        for salon_id, owner_id in hidden
+        if viewer_id is None or (owner_id != viewer_id and salon_id not in member_of)
+    ]
 
 
 class User(Document):
@@ -187,6 +236,13 @@ class Salon(Document):
     # Abonnement plateforme (§3.6)
     subscription_status: SubscriptionStatus = SubscriptionStatus.TRIAL
     trial_ends_at: datetime | None = None
+
+    # Vérification LAMSSA (§2.5). `None` = salon antérieur à la règle, visible :
+    # un défaut à PENDING cacherait d'un coup tous les salons existants. Seule
+    # la création pose PENDING explicitement.
+    verification_status: SalonVerification | None = None
+    verified_at: datetime | None = None
+    rejection_reason: str = ""
 
     created_at: datetime = Field(default_factory=utcnow)
 

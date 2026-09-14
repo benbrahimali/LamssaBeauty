@@ -8,6 +8,19 @@ class Role(str, Enum):
     OWNER = "OWNER"
 
 
+class SalonVerification(str, Enum):
+    """Validation d'un salon par LAMSSA avant qu'il ne s'ouvre au public (§2.5).
+
+    Un gérant crée son salon dès l'inscription et le prépare aussitôt ; les
+    clients ne le voient qu'une fois vérifié. Les salons antérieurs à cette règle
+    n'ont pas le champ et restent visibles : les cacher d'un coup effacerait de
+    l'app des salons qui reçoivent déjà des clients.
+    """
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
 class SalonType(str, Enum):
     BARBERSHOP = "barbershop"
     FEMME = "femme"
@@ -102,6 +115,9 @@ class NotificationType(str, Enum):
     NEW_PORTFOLIO = "new_portfolio"
     NEW_REVIEW = "new_review"
     REEL_LIKED = "reel_liked"
+    SALON_VERIFIED = "salon_verified"
+    SALON_REJECTED = "salon_rejected"
+    SALON_PENDING = "salon_pending"      # à l'administrateur : un salon attend
 
 
 class ChargePeriod(str, Enum):

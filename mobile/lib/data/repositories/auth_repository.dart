@@ -48,8 +48,19 @@ class AuthRepository {
       ownedSalonId: owned.isEmpty ? null : owned.first['id']?.toString(),
       ownedSalonName: owned.isEmpty ? '' : (owned.first['name']?.toString() ?? ''),
       canCreateSalon: data['can_create_salon'] == true,
+      ownedSalonVerification: owned.isEmpty
+          ? 'verified'
+          : (owned.first['verification']?.toString() ?? 'verified'),
+      ownedSalonRejectionReason: owned.isEmpty
+          ? ''
+          : (owned.first['rejection_reason']?.toString() ?? ''),
     );
   }
+
+  /// « عندي صالون » : déclare le compte professionnel pour ouvrir son salon.
+  ///
+  /// Refusé par le serveur (403) pour un coiffeur employé.
+  Future<void> activatePro() => _api.post('/auth/me/pro');
 
   Future<void> updateProfile({String? name, String? locale}) async {
     await _api.patch('/auth/me', body: {
@@ -96,6 +107,12 @@ class AccountContext {
   /// protège, pas cet indicateur.
   final bool canCreateSalon;
 
+  /// Vérification LAMSSA du salon possédé : `pending`, `verified`, `rejected`.
+  ///
+  /// Tant qu'il n'est pas vérifié, le salon est invisible des clients.
+  final String ownedSalonVerification;
+  final String ownedSalonRejectionReason;
+
   const AccountContext({
     required this.user,
     this.staffId,
@@ -103,8 +120,14 @@ class AccountContext {
     this.ownedSalonId,
     this.ownedSalonName = '',
     this.canCreateSalon = false,
+    this.ownedSalonVerification = 'verified',
+    this.ownedSalonRejectionReason = '',
   });
 
   /// Le salon sur lequel travailler : celui qu'on possède, sinon celui où l'on est employé.
   String? get activeSalonId => ownedSalonId ?? staffSalonId;
+
+  /// Le salon du gérant est-il encore caché aux clients ?
+  bool get ownedSalonHidden =>
+      ownedSalonId != null && ownedSalonVerification != 'verified';
 }

@@ -70,13 +70,13 @@ void main() {
   /// impose un délai de 60 s entre deux envois, ce qui ferait échouer la suite.
   Future<void> login(String phone) => auth.verifyOtp(phone: phone, code: devCode);
 
-  /// Accorde l'accès professionnel à un compte, comme le ferait la console.
-  Future<void> accorderAccesPro(String userId) async {
+  /// Valide un salon, comme le ferait la console d'administration.
+  Future<void> validerSalon(String salonId) async {
     final adminApi = ApiClient(TokenStore());
     addTearDown(adminApi.dispose);
     await AuthRepository(adminApi).verifyOtp(phone: ownerPhone, code: devCode);
-    await adminApi.patch('/admin/users/$userId/pro-access',
-        query: {'granted': true});
+    await adminApi.patch('/admin/salons/$salonId/verification',
+        query: {'value': 'verified'});
   }
 
 
@@ -451,9 +451,9 @@ void main() {
       final user = await auth.verifyOtp(phone: ownerPhone, code: devCode);
       expect(user.role, AppRole.client, reason: 'compte neuf = client');
 
-      // Ouvrir un salon demande désormais un compte professionnel. C'est le
-      // parcours réel : l'administration l'accorde, puis le gérant s'installe.
-      await accorderAccesPro(user.id);
+      // Parcours réel : le gérant choisit « عندي صالون », ce qui déclare son
+      // compte professionnel, puis il crée son salon aussitôt.
+      await auth.activatePro();
 
       final salon = await admin.createSalon(
         name: 'Salon Test $stamp',
@@ -499,9 +499,16 @@ void main() {
       expect((await admin.services(salon.id)).map((s) => s.id), contains(service.id));
       expect((await admin.staff(salon.id)).map((s) => s.id), contains(member.id));
 
-      // Et le salon est immédiatement réservable : il sort dans la recherche géo.
-      final found = await salons.search(lat: 36.8065, lng: 10.1815, maxKm: 5);
-      expect(found.any((s) => s.id == salon.id), isTrue);
+      // Tant que LAMSSA ne l'a pas vérifié, le salon reste invisible des clients…
+      expect((await auth.me()).ownedSalonVerification, 'pending');
+      final avant = await salons.search(lat: 36.8065, lng: 10.1815, maxKm: 5);
+      expect(avant.any((s) => s.id == salon.id), isFalse,
+          reason: 'un salon non vérifié ne sort pas dans la recherche');
+
+      // … puis il sort dans la recherche géo dès sa validation.
+      await validerSalon(salon.id);
+      final apres = await salons.search(lat: 36.8065, lng: 10.1815, maxKm: 5);
+      expect(apres.any((s) => s.id == salon.id), isTrue);
     });
 
     test('un client ne peut pas administrer le salon d’un autre', () async {

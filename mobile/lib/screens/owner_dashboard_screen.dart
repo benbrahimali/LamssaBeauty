@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../widgets/revenue_bar.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/verification_banner.dart';
 import 'create_salon_screen.dart';
 import 'manage_salon_screen.dart';
 
@@ -57,10 +58,19 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
       body: RefreshIndicator(
         color: AppColors.gold,
         backgroundColor: AppColors.card,
-        onRefresh: cash.load,
+        // Le contexte aussi : c'est lui qui dit si LAMSSA a validé le salon
+        // depuis la dernière ouverture.
+        onRefresh: () => Future.wait([cash.load(), auth.refreshContext()]),
         child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(child: _buildHeader(auth, cash)),
+            if (auth.context?.ownedSalonHidden ?? false)
+              SliverToBoxAdapter(
+                child: VerificationBanner(
+                  status: auth.context!.ownedSalonVerification,
+                  reason: auth.context!.ownedSalonRejectionReason,
+                ),
+              ),
             if (cash.loading && cash.day.transactionCount == 0 && cash.agenda.bookings.isEmpty)
               const SliverToBoxAdapter(child: SizedBox(height: 300, child: AppLoader()))
             else if (cash.error != null && cash.day.transactionCount == 0)

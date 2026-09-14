@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -211,17 +213,28 @@ class _AppShellState extends State<_AppShell> {
     });
     _refreshForSession();
 
-    if (wasPro) _orienterProfessionnel();
+    if (wasPro) unawaited(_orienterProfessionnel());
   }
 
   /// Envoie l'inscrit « professionnel » là où il a affaire.
-  void _orienterProfessionnel() {
-    final ctx = _auth.context;
-    switch (AuthController.proLandingFor(
-      ownedSalonId: ctx?.ownedSalonId,
-      staffId: ctx?.staffId,
-      canCreateSalon: ctx?.canCreateSalon ?? false,
-    )) {
+  Future<void> _orienterProfessionnel() async {
+    var ctx = _auth.context;
+    ProLanding destination() => AuthController.proLandingFor(
+          ownedSalonId: ctx?.ownedSalonId,
+          staffId: ctx?.staffId,
+          canCreateSalon: ctx?.canCreateSalon ?? false,
+        );
+
+    // « عندي صالون » vaut déclaration : le gérant ouvre son salon tout de
+    // suite, LAMSSA le vérifie ensuite et il reste invisible des clients d'ici
+    // là. Le serveur refuse un coiffeur employé.
+    if (destination() == ProLanding.proLocked) {
+      await _auth.activateProAccount();
+      if (!mounted) return;
+      ctx = _auth.context;
+    }
+
+    switch (destination()) {
       case ProLanding.ownerSpace:
         break;   // il est déjà chez lui
 
@@ -240,14 +253,15 @@ class _AppShellState extends State<_AppShell> {
         });
 
       case ProLanding.proLocked:
-        // Le serveur refuserait la création : lui montrer le formulaire le
-        // ferait tout saisir pour rien. On explique, il reste sur l'espace
-        // client — un compte utilisable vaut mieux qu'une impasse.
+        // L'activation a échoué (réseau, ou coiffeur refusé par le serveur) :
+        // lui montrer le formulaire le ferait tout saisir pour un 403. Il
+        // reste sur l'espace client — un compte utilisable vaut mieux qu'une
+        // impasse.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           showAppSnack(
             context,
-            'باش تحلّ صالون، لازمك حساب مهني — كلّمنا باش نفعّلوهولك',
+            'ما نجمناش نحلّولك حساب مهني توّا — عاود جرّب، ولا كلّمنا',
           );
         });
     }

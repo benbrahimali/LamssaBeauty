@@ -11,7 +11,7 @@ import unicodedata
 from beanie import PydanticObjectId
 from pydantic import BaseModel
 
-from app.models.documents import Salon, Service, StaffMember
+from app.models.documents import PUBLIC_SALON_FILTER, Salon, Service, StaffMember
 from app.models.enums import SalonStatus
 
 #: Au-delà, proposer un coiffeur n'a plus de sens pour une coupe de quartier.
@@ -135,6 +135,7 @@ async def find_matches(
     salons = await Salon.find(
         {
             "status": SalonStatus.OPEN.value,
+            **PUBLIC_SALON_FILTER,
             "location": {
                 "$nearSphere": {
                     "$geometry": {"type": "Point", "coordinates": [lng, lat]},

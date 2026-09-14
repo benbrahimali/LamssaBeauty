@@ -186,6 +186,7 @@ async function viewStats() {
   const s = await api('/admin/stats');
   $('view').innerHTML = `<div class="cards">
     ${stat('Salons', s.salons.total, `${s.salons.ouverts} ouverts · ${s.salons.fermes} fermés`)}
+    ${stat('À valider', s.salons.en_attente, 'salons invisibles des clients')}
     ${stat('Comptes', s.comptes.total, `${s.comptes.clients} clients · ${s.comptes.gerants} gérants`)}
     ${stat('Équipes', s.equipes, 'coiffeurs rattachés')}
     ${stat('Rendez-vous', s.rdv.total, `${s.rdv.aujourdhui} aujourd'hui · ${s.rdv.semaine} sur 7 j`)}
@@ -207,6 +208,7 @@ async function viewSalons() {
   const rows = salons.map((s) => {
     const hist = Object.entries(s.history).map(([k, v]) => `${k} ${v}`).join(', ');
     const ouvert = s.status === 'open';
+    const verif = VERIF[s.verification] || VERIF.verified;
     return `<tr>
       <td><strong>${esc(s.name)}</strong>${s.looks_like_test
         ? ' <span class="pill warn">test</span>' : ''}
@@ -214,6 +216,14 @@ async function viewSalons() {
       <td>${esc(s.owner_name || '—')}<div class="muted">${esc(s.owner_phone)}</div></td>
       <td>${s.staff} / ${s.services}</td>
       <td>${s.photos}</td>
+      <td><span class="pill ${verif.cls}">${verif.label}</span>${s.rejection_reason
+        ? `<div class="muted">${esc(s.rejection_reason)}</div>` : ''}
+        <div style="margin-top:6px">
+        ${s.verification !== 'verified'
+          ? `<button class="primary" onclick="setVerification('${s.id}','verified')">Valider</button>` : ''}
+        ${s.verification !== 'rejected'
+          ? `<button class="danger" onclick="setVerification('${s.id}','rejected')">Refuser</button>` : ''}
+        </div></td>
       <td><span class="pill ${ouvert ? 'ok' : 'off'}">${ouvert ? 'ouvert' : 'fermé'}</span></td>
       <td class="muted">${hist || '—'}</td>
       <td>
@@ -226,8 +236,32 @@ async function viewSalons() {
       </td></tr>`;
   });
   $('view').innerHTML = table(
-    ['Salon', 'Propriétaire', 'Équipe / services', 'Photos', 'Statut', 'Historique', ''],
+    ['Salon', 'Propriétaire', 'Équipe / services', 'Photos', 'Vérification', 'Statut', 'Historique', ''],
     rows);
+}
+
+// Un salon « à valider » est invisible des clients : ni recherche, ni carte,
+// ni réservation. Le gérant le prépare pendant ce temps.
+const VERIF = {
+  pending: { cls: 'warn', label: 'à valider' },
+  verified: { cls: 'ok', label: 'vérifié' },
+  rejected: { cls: 'off', label: 'refusé' },
+};
+
+async function setVerification(id, value) {
+  let reason = '';
+  if (value === 'rejected') {
+    const saisie = prompt('Raison du refus (envoyée au gérant) :', '');
+    if (saisie === null) return;
+    reason = saisie.trim();
+  }
+  try {
+    await api(`/admin/salons/${id}/verification?value=${value}`
+      + (reason ? `&reason=${encodeURIComponent(reason)}` : ''), { method: 'PATCH' });
+    say(value === 'verified' ? 'Salon validé : il est visible des clients.'
+                             : 'Salon refusé : le gérant est prévenu.');
+    viewSalons();
+  } catch (e) { say(e.message, true); }
 }
 
 async function setStatus(id, value) {

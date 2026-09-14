@@ -14,6 +14,7 @@ import httpx
 
 os.environ.setdefault("MONGO_DB", "lamssa_smoke")
 
+from app.core.config import settings  # noqa: E402
 from app.core.db import init_db, redis  # noqa: E402
 from app.core.timeutils import combine_local, to_local, utcnow  # noqa: E402
 from app.main import app  # noqa: E402
@@ -76,11 +77,10 @@ async def main() -> int:
             str(resp.status_code),
         )
 
-        # L'administration l'accorde — demain ce sera un abonnement payé, le
-        # point de contrôle ne changera pas.
-        compte = await User.find_one(User.phone == "+21699111111")
-        compte.pro_access = True
-        await compte.save()
+        # « عندي صالون » : le gérant se déclare lui-même, sans attendre personne.
+        resp = await c.post("/api/v1/auth/me/pro", headers=auth(owner))
+        check("Déclaration professionnelle acceptée", resp.status_code == 200,
+              str(resp.status_code))
 
         resp = await c.post("/api/v1/salons", headers=auth(owner), json=nouveau_salon)
         check("Création du salon", resp.status_code == 201, str(resp.status_code))
@@ -118,6 +118,69 @@ async def main() -> int:
             json={"phone": "+21699222222", "display_name": "Ahmed"},
         )
         check("Doublon d'équipe refusé", resp.status_code == 409, str(resp.status_code))
+
+        # Un coiffeur employé ne se déclare pas gérant : il a déjà un salon.
+        coiffeur = await token_for(c, "+21699222222")
+        resp = await c.post("/api/v1/auth/me/pro", headers=auth(coiffeur))
+        check("Coiffeur employé : déclaration pro refusée (403)",
+              resp.status_code == 403, str(resp.status_code))
+        resp = await c.post("/api/v1/salons", headers=auth(coiffeur), json=nouveau_salon)
+        check("Coiffeur employé : création refusée (403)",
+              resp.status_code == 403, str(resp.status_code))
+
+        # ── 2 bis. Vérification : invisible tant que LAMSSA n'a pas validé ──
+        resp = await c.get("/api/v1/salons", params={"near": "36.8065,10.1815", "max_km": 5})
+        check("Salon en attente absent de la recherche",
+              all(s["id"] != salon_id for s in resp.json()))
+
+        resp = await c.get(f"/api/v1/salons/{salon_id}")
+        check("Fiche du salon en attente : 404 pour un visiteur",
+              resp.status_code == 404, str(resp.status_code))
+
+        resp = await c.get(f"/api/v1/salons/{salon_id}", headers=auth(owner))
+        check("Le gérant voit le salon qu'il prépare", resp.status_code == 200,
+              str(resp.status_code))
+
+        resp = await c.get(f"/api/v1/staff/{staff_id}")
+        check("Profil du coiffeur caché au public", resp.status_code == 404,
+              str(resp.status_code))
+
+        curieux = await token_for(c, "+21698555555", "Curieux")
+        resp = await c.post(
+            "/api/v1/bookings",
+            headers=auth(curieux),
+            json={
+                "salon_id": salon_id,
+                "staff_id": staff_id,
+                "service_ids": [service_id],
+                "start": (utcnow() + timedelta(days=2)).isoformat(),
+            },
+        )
+        check("Réservation refusée sur un salon en attente (409)",
+              resp.status_code == 409, str(resp.status_code))
+
+        me = await c.get("/api/v1/auth/me", headers=auth(owner))
+        check("Le gérant sait que son salon attend",
+              me.json()["owned_salons"][0]["verification"] == "pending")
+
+        admins = sorted(settings.admin_phones)
+        if admins:
+            admin = await token_for(c, admins[0], "Admin")
+            resp = await c.patch(
+                f"/api/v1/admin/salons/{salon_id}/verification",
+                params={"value": "verified"},
+                headers=auth(admin),
+            )
+            check("Validation par l'administration", resp.status_code == 200,
+                  str(resp.status_code))
+        else:
+            from app.models.documents import Salon
+            from app.models.enums import SalonVerification
+
+            salon_doc = await Salon.get(salon_id)
+            salon_doc.verification_status = SalonVerification.VERIFIED
+            await salon_doc.save()
+            print("  · ADMIN_PHONES vide : salon validé directement en base")
 
         # ── 3. Recherche géo ─────────────────────────────────────────────────
         resp = await c.get("/api/v1/salons", params={"near": "36.8065,10.1815", "max_km": 5})

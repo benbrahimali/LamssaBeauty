@@ -4,7 +4,8 @@ from datetime import date
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.core.deps import get_salon, my_staff_profile
+from app.core.deps import can_see_salon, get_salon, my_staff_profile
+from app.core.security import optional_user
 from app.core.timeutils import local_day_bounds, to_local, utcnow
 from app.models.documents import (
     Booking,
@@ -51,11 +52,15 @@ async def my_agenda(
 
 
 @router.get("/{staff_id}", summary="Profil public d'un coiffeur")
-async def staff_profile(staff_id: PydanticObjectId):
+async def staff_profile(
+    staff_id: PydanticObjectId, viewer: User | None = Depends(optional_user)
+):
     staff = await StaffMember.get(staff_id)
     if not staff:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur introuvable")
     salon = await Salon.get(staff.salon_id)
+    if salon and not await can_see_salon(salon, viewer):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur introuvable")
     user = await User.get(staff.user_id)
     portfolio = (
         await PortfolioItem.find(PortfolioItem.staff_id == staff_id)
@@ -96,11 +101,14 @@ async def slots(
     staff_id: PydanticObjectId,
     day: date = Query(..., alias="date"),
     service_ids: list[PydanticObjectId] = Query(default=[]),
+    viewer: User | None = Depends(optional_user),
 ):
     staff = await StaffMember.get(staff_id)
     if not staff:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur introuvable")
     salon = await get_salon(staff.salon_id)
+    if not await can_see_salon(salon, viewer):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur introuvable")
     return await available_slots(
         staff=staff, salon=salon, day=day, service_ids=service_ids or None
     )
@@ -112,6 +120,7 @@ async def availability(
     start: date | None = Query(default=None, alias="from"),
     days: int = Query(default=14, ge=1, le=60),
     service_ids: list[PydanticObjectId] = Query(default=[]),
+    viewer: User | None = Depends(optional_user),
 ):
     """Ce que le calendrier doit afficher avant que le client tape un jour.
 
@@ -122,6 +131,8 @@ async def availability(
     if not staff:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur introuvable")
     salon = await get_salon(staff.salon_id)
+    if not await can_see_salon(salon, viewer):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur introuvable")
     return {
         "days": await day_availability(
             staff=staff,

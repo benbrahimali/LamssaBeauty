@@ -14,7 +14,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 
 from app.core.config import settings
-from app.core.deps import get_salon
+from app.core.deps import get_salon, hidden_salon_ids, without_salons
 from app.core.security import current_user, optional_user
 from app.core.timeutils import utcnow
 from app.models.documents import Reel, Salon, StaffMember, User
@@ -144,6 +144,8 @@ async def feed(
         query["salon_id"] = salon_id
     if staff_id:
         query["staff_id"] = staff_id
+    # Un salon en attente de vérification n'apparaît pas dans le fil public.
+    query = without_salons(query, await hidden_salon_ids(viewer))
 
     reels = (
         await Reel.find(query)

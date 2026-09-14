@@ -29,7 +29,14 @@ from app.models.documents import (
     Transaction,
     User,
 )
-from app.models.enums import ReviewStatus, Role, SalonStatus
+from app.models.enums import (
+    NotificationType,
+    ReviewStatus,
+    Role,
+    SalonStatus,
+    SalonVerification,
+)
+from app.services.notification_service import notify
 
 router = APIRouter()
 
@@ -85,6 +92,9 @@ async def stats(_: User = Depends(require_admin)):
             "total": await Salon.find_all().count(),
             "ouverts": await Salon.find(Salon.status == SalonStatus.OPEN).count(),
             "fermes": await Salon.find(Salon.status == SalonStatus.CLOSED).count(),
+            "en_attente": await Salon.find(
+                {"verification_status": SalonVerification.PENDING.value}
+            ).count(),
         },
         "comptes": {
             "total": await User.find_all().count(),
@@ -135,6 +145,11 @@ async def list_salons(_: User = Depends(require_admin), limit: int = Query(200, 
                 "type": s.type,
                 "city": s.city,
                 "status": s.status,
+                # Absent = salon antérieur à la vérification, visible.
+                "verification": s.verification_status.value
+                if s.verification_status
+                else "verified",
+                "rejection_reason": s.rejection_reason,
                 "photos": len(s.photos),
                 "owner_phone": proprietaire.phone if proprietaire else "",
                 "owner_name": proprietaire.name if proprietaire else "",
@@ -147,7 +162,54 @@ async def list_salons(_: User = Depends(require_admin), limit: int = Query(200, 
                 "looks_like_test": bool(TEST_SALON.match(s.name)),
             }
         )
+    # Les salons à valider d'abord : c'est le travail qui attend. Tri stable,
+    # l'ordre de création est conservé à l'intérieur de chaque groupe.
+    lignes.sort(key=lambda ligne: ligne["verification"] != SalonVerification.PENDING.value)
     return {"salons": lignes, "count": len(lignes)}
+
+
+@router.patch("/salons/{salon_id}/verification", summary="Valider ou refuser un salon")
+async def set_verification(
+    salon_id: PydanticObjectId,
+    value: SalonVerification,
+    reason: str = Query("", max_length=300),
+    _: User = Depends(require_admin),
+):
+    """Rend le salon visible des clients, ou le garde caché.
+
+    Le gérant est prévenu dans les deux cas : un refus silencieux le laisserait
+    préparer un salon que personne ne verra jamais.
+    """
+    salon = await Salon.get(salon_id)
+    if not salon:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Salon introuvable")
+
+    salon.verification_status = value
+    salon.verified_at = utcnow() if value is SalonVerification.VERIFIED else None
+    salon.rejection_reason = reason.strip() if value is SalonVerification.REJECTED else ""
+    await salon.save()
+
+    if value is SalonVerification.VERIFIED:
+        await notify(
+            salon.owner_id,
+            NotificationType.SALON_VERIFIED,
+            "Salon validé ✅",
+            f"« {salon.name} » est maintenant visible : les clients peuvent réserver.",
+            {"salon_id": str(salon.id)},
+        )
+    elif value is SalonVerification.REJECTED:
+        await notify(
+            salon.owner_id,
+            NotificationType.SALON_REJECTED,
+            "Salon non validé",
+            salon.rejection_reason or "Contactez LAMSSA pour en connaître la raison.",
+            {"salon_id": str(salon.id)},
+        )
+    return {
+        "id": str(salon.id),
+        "verification": salon.verification_status.value,
+        "rejection_reason": salon.rejection_reason,
+    }
 
 
 @router.patch("/salons/{salon_id}/status", summary="Ouvrir ou suspendre un salon")

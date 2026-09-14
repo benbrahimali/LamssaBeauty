@@ -15,6 +15,7 @@ from app.models.documents import (
     StaffMember,
     Transaction,
     User,
+    salon_is_public,
 )
 from app.models.enums import (
     ACTIVE_BOOKING_STATUSES,
@@ -74,6 +75,17 @@ async def _pick_any_staff(
 @router.post("", status_code=201, summary="Créer un RDV (app ou walk-in)")
 async def book(body: BookingCreate, user: User = Depends(current_user)):
     salon = await get_salon(body.salon_id)
+
+    # Un salon non vérifié ne prend pas de réservation en ligne. Le walk-in
+    # reste possible : il est saisi par le salon lui-même, qui peut déjà
+    # recevoir des clients en vrai.
+    if body.source is not BookingSource.WALKIN and not salon_is_public(
+        salon.verification_status
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Ce salon n'est pas encore ouvert aux réservations en ligne.",
+        )
 
     if body.source is BookingSource.WALKIN:
         # Un walk-in n'est saisi que depuis l'app pro, pour garder la caisse exacte.

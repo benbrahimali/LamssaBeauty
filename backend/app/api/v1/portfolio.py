@@ -4,7 +4,7 @@ from datetime import timedelta
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 
-from app.core.deps import my_staff_profile
+from app.core.deps import hidden_salon_ids, my_staff_profile, without_salons
 from app.core.security import current_user, optional_user
 from app.core.timeutils import utcnow
 from app.models.documents import PortfolioItem, Salon, StaffMember, User
@@ -50,6 +50,7 @@ async def trending(
         query["tags"] = tag.strip().lower().lstrip("#")
     if salon_id:
         query["salon_id"] = salon_id
+    query = without_salons(query, await hidden_salon_ids(viewer))
 
     items = (
         await PortfolioItem.find(query)
@@ -66,8 +67,9 @@ async def staff_portfolio(
     limit: int = Query(40, ge=1, le=100),
     viewer: User | None = Depends(optional_user),
 ):
+    query = without_salons({"staff_id": staff_id}, await hidden_salon_ids(viewer))
     items = (
-        await PortfolioItem.find(PortfolioItem.staff_id == staff_id)
+        await PortfolioItem.find(query)
         .sort("-created_at")
         .limit(limit)
         .to_list()

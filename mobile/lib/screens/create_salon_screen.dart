@@ -245,7 +245,7 @@ class _CreateSalonScreenState extends State<CreateSalonScreen> {
       if (!mounted) return;
 
       Navigator.of(context).pop(salon);
-      showAppSnack(context, 'صالونك تعمل ✅ زيد الخدمات والفريق', success: true);
+      showAppSnack(context, 'صالونك تعمل ✅ حضّر الخدمات والفريق — يظهر للحرفاء كي نثبّتوه', success: true);
     } on ApiException catch (e) {
       if (mounted) showAppSnack(context, e.message);
     } finally {

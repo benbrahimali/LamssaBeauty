@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.core.config import settings
 from app.core.db import redis
 from app.core.security import create_tokens, current_user, revoke_refresh, rotate_refresh
-from app.models.documents import StaffMember, User
+from app.models.documents import StaffMember, User, may_self_activate_pro
 from app.schemas.auth import (
     AuthOut,
     DeviceToken,
@@ -126,12 +126,49 @@ async def me(user: User = Depends(current_user)):
     return {
         "user": _user_out(user),
         "staff_profiles": memberships,
-        "owned_salons": [{"id": str(s.id), "name": s.name, "type": s.type} for s in owned],
+        "owned_salons": [
+            {
+                "id": str(s.id),
+                "name": s.name,
+                "type": s.type,
+                # Absent = salon antérieur à la vérification, donc visible.
+                "verification": s.verification_status.value
+                if s.verification_status
+                else "verified",
+                "rejection_reason": s.rejection_reason,
+            }
+            for s in owned
+        ],
         # L'app s'en sert pour montrer ou non « ouvrir un salon ». Le serveur
         # refuse de toute façon : ce drapeau évite d'offrir un bouton qui mène
         # à un 403, il ne protège rien à lui seul.
         "can_create_salon": user.may_open_salon(),
     }
+
+
+@router.post("/me/pro", summary="Se déclarer professionnel (« عندي صالون »)")
+async def become_pro(user: User = Depends(current_user)):
+    """Ouvre le formulaire de création au gérant qui s'inscrit.
+
+    Ce n'est pas une porte ouverte : le salon qu'il créera reste invisible des
+    clients tant que LAMSSA ne l'a pas vérifié. Un coiffeur employé est refusé —
+    il travaille déjà dans un salon et n'a pas à en ouvrir un depuis ce compte.
+
+    Idempotent : l'appeler deux fois ne change rien. Le jour où l'accès
+    deviendra un abonnement, c'est ici que commencera la période d'essai.
+    """
+    if not user.may_open_salon():
+        employe = await StaffMember.find_one(StaffMember.user_id == user.id)
+        if not may_self_activate_pro(has_staff_profile=employe is not None):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Ce compte est rattaché à un salon comme coiffeur : il ne peut pas "
+                "ouvrir de salon. Contactez LAMSSA si vous vous installez à votre compte.",
+            )
+        user.pro_access = True
+        user.pro_access_until = None
+        await user.save()
+    return {"can_create_salon": True}
 
 
 @router.patch("/me", response_model=UserOut, summary="Mettre à jour son profil")

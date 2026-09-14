@@ -210,6 +210,20 @@ class AuthController extends ChangeNotifier {
     }
   }
 
+  /// « عندي صالون » : déclare le compte professionnel, puis recharge le
+  /// contexte pour que `canCreateSalon` le reflète.
+  ///
+  /// Renvoie le message d'erreur (coiffeur employé, réseau), ou null.
+  Future<String?> activateProAccount() async {
+    try {
+      await _repo.activatePro();
+    } on ApiException catch (e) {
+      return e.message;
+    }
+    await refreshContext();
+    return null;
+  }
+
   /// Recharge les rattachements — après création d'un salon, par exemple.
   Future<void> refreshContext() async {
     try {
