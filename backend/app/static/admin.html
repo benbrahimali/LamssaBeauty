@@ -69,6 +69,7 @@
   <p class="note">Le numéro doit figurer dans <code>ADMIN_PHONES</code>.</p>
   <div style="display:grid; gap:10px; margin-top:18px">
     <input id="phone" placeholder="+216 99 000 000" autocomplete="tel">
+    <button onclick="requestCode()">Recevoir le code</button>
     <input id="code" placeholder="Code OTP" autocomplete="one-time-code">
     <button class="primary" onclick="login()">Entrer</button>
   </div>
@@ -123,6 +124,31 @@ async function api(path, options = {}) {
   const body = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) throw new Error(body?.detail || ('Erreur ' + res.status));
   return body;
+}
+
+// Sans cette étape, seul un code de dev fixe permettait d'entrer. Demander un
+// code remet aussi à zéro le compteur de tentatives : c'est ce qui débloque
+// un « Trop de tentatives ».
+async function requestCode() {
+  $('loginErr').textContent = '';
+  try {
+    const res = await fetch(API + '/auth/otp/request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: $('phone').value.trim() }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || 'Envoi refusé');
+    if (body.dev_code) {
+      // Serveur hors production : le code est renvoyé au lieu d'un SMS.
+      $('code').value = body.dev_code;
+      $('loginErr').textContent = 'Mode développement : code rempli automatiquement.';
+    } else {
+      $('loginErr').textContent = 'Code envoyé par SMS.';
+    }
+    $('code').focus();
+  } catch (e) {
+    $('loginErr').textContent = e.message;
+  }
 }
 
 async function login() {
