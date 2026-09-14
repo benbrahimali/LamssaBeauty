@@ -34,6 +34,9 @@ class SalonsController extends ChangeNotifier {
   bool get openNow => _openNow;
   bool get hasPosition => _lat != null && _lng != null;
 
+  /// Texte recherché — partagé par l'accueil et « اكتشف ».
+  String get query => _query;
+
   /// Dernière position connue — réutilisée par Style DNA pour proposer des
   /// coiffeurs proches sans redemander l'autorisation au milieu de l'analyse.
   double? get lat => _lat;
@@ -65,8 +68,9 @@ class SalonsController extends ChangeNotifier {
   }
 
   Future<void> setQuery(String value) async {
-    if (_query == value) return;
-    _query = value;
+    final cleaned = value.trim();
+    if (_query == cleaned) return;
+    _query = cleaned;
     await _fetch();
   }
 

@@ -191,6 +191,19 @@ async def main() -> int:
         resp = await c.get("/api/v1/salons", params={"near": "34.7,10.7", "max_km": 5})
         check("Salon hors rayon exclu", all(s["id"] != salon_id for s in resp.json()))
 
+        # Le champ promet « صالون، حجام » : le prénom du coiffeur retrouve son salon.
+        resp = await c.get("/api/v1/salons", params={"q": "ahmed"})
+        check("Recherche par prénom du coiffeur",
+              any(s["id"] == salon_id for s in resp.json()), str(resp.status_code))
+
+        resp = await c.get("/api/v1/salons", params={"q": "Smoke ("})
+        check("Recherche avec parenthèse sans erreur", resp.status_code == 200,
+              str(resp.status_code))
+
+        resp = await c.get("/api/v1/salons", params={"q": ".*"})
+        check("« .* » ne renvoie pas tous les salons",
+              all(s["id"] != salon_id for s in resp.json()))
+
         # ── 4. Créneaux & réservation ────────────────────────────────────────
         # Premier jour réellement ouvert : viser « demain » en dur faisait
         # échouer le test chaque fois qu'il tombait un dimanche, jour de

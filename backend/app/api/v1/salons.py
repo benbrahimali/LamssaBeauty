@@ -1,4 +1,5 @@
 """Salons : recherche géolocalisée (§3.2), fiche publique, administration (§3.5)."""
+import re
 from datetime import datetime
 
 from beanie import PydanticObjectId
@@ -68,6 +69,33 @@ def is_open_now(salon: Salon, now: datetime | None = None) -> bool:
     return True
 
 
+def search_clause(q: str, staff_salon_ids: list) -> dict:
+    """Filtre de recherche : nom du salon, ou salon d'un coiffeur au nom cherché.
+
+    Le texte est échappé : glissé tel quel dans une expression régulière,
+    « ( » faisait échouer la recherche et « .* » renvoyait tous les salons.
+    """
+    motif = {"$regex": re.escape(q.strip()), "$options": "i"}
+    clauses: list[dict] = [{"name": motif}]
+    if staff_salon_ids:
+        clauses.append({"_id": {"$in": list(staff_salon_ids)}})
+    return {"$or": clauses}
+
+
+async def _search_clause(q: str) -> dict:
+    """Le champ de l'app promet « صالون، حجام » : taper le prénom de son
+    coiffeur doit retrouver le salon où il travaille.
+
+    Le nom affiché dans l'équipe prime ; à défaut, celui du compte.
+    """
+    motif = {"$regex": re.escape(q.strip()), "$options": "i"}
+    comptes = await User.find({"name": motif}).limit(500).to_list()
+    equipe = await StaffMember.find(
+        {"$or": [{"display_name": motif}, {"user_id": {"$in": [u.id for u in comptes]}}]}
+    ).to_list()
+    return search_clause(q, sorted({m.salon_id for m in equipe}, key=str))
+
+
 async def _to_card(salon: Salon, distance_m: float | None = None) -> SalonCard:
     services = await Service.find(
         Service.salon_id == salon.id, Service.active == True  # noqa: E712
@@ -112,8 +140,8 @@ async def search_salons(
         match["type"] = type.value
     if min_rating:
         match["rating_avg"] = {"$gte": min_rating}
-    if q:
-        match["name"] = {"$regex": q.strip(), "$options": "i"}
+    if q and q.strip():
+        match.update(await _search_clause(q))
 
     if near:
         try:

@@ -15,6 +15,7 @@ import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 import 'my_bookings_screen.dart';
+import '../widgets/salon_search_field.dart';
 
 class HomeScreen extends StatefulWidget {
   final Function(Salon) onGoSalon;
@@ -35,7 +36,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _searchCtrl = TextEditingController();
   Future<List<Booking>>? _upcoming;
 
   /// Style DNA n'existe que si le serveur a une clé de modèle vision — sinon la
@@ -127,12 +127,6 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _upcoming = context.read<BookingRepository>().mine(upcoming: true);
     });
-  }
-
-  @override
-  void dispose() {
-    _searchCtrl.dispose();
-    super.dispose();
   }
 
   @override
@@ -249,37 +243,16 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildSearch(SalonsController salons) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14),
-            child: Icon(Icons.search_rounded, color: AppColors.sub, size: 18),
-          ),
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              textInputAction: TextInputAction.search,
-              onSubmitted: salons.setQuery,
-              style: GoogleFonts.dmSans(fontSize: 14, color: AppColors.text),
-              decoration: InputDecoration(
-                hintText: 'ابحث صالون، حجام...',
-                hintStyle: GoogleFonts.dmSans(color: AppColors.sub, fontSize: 14),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14),
-            child: Icon(Icons.location_on_rounded, color: AppColors.sub, size: 18),
-          ),
-        ]),
+      child: SalonSearchField(
+        query: salons.query,
+        onSearch: salons.setQuery,
+        // L'épingle trie « قريب منك » par distance réelle, et redemande la
+        // position si l'utilisateur s'est déplacé.
+        onLocate: () {
+          if (!_localisation) _localiser();
+        },
+        locating: _localisation,
+        located: salons.hasPosition,
       ),
     );
   }

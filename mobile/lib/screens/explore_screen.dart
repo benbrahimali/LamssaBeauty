@@ -12,6 +12,7 @@ import '../core/location.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/map_controls.dart';
+import '../widgets/salon_search_field.dart';
 
 class ExploreScreen extends StatefulWidget {
   final Function(Salon) onGoSalon;
@@ -25,7 +26,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
   GoogleMapController? _mapController;
   bool _mapView = false;
   bool _locating = false;
-  final _searchCtrl = TextEditingController();
 
   /// Fond de carte choisi : plan, satellite ou mixte.
   MapType _mapType = MapType.normal;
@@ -89,7 +89,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   void dispose() {
-    _searchCtrl.dispose();
     _mapController?.dispose();
     super.dispose();
   }
@@ -234,33 +233,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
   Widget _buildSearch(SalonsController controller) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-      child: Container(
-        height: 48,
-        decoration: BoxDecoration(
-          color: AppColors.card,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Row(children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14),
-            child: Icon(Icons.search_rounded, color: AppColors.sub, size: 18),
-          ),
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              textInputAction: TextInputAction.search,
-              onSubmitted: controller.setQuery,
-              style: GoogleFonts.dmSans(fontSize: 14, color: AppColors.text),
-              decoration: InputDecoration(
-                hintText: 'ابحث...',
-                hintStyle: GoogleFonts.dmSans(color: AppColors.sub, fontSize: 14),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-          ),
-        ]),
+      // Pas d'épingle ici : le bouton « موقعي » de l'en-tête s'en charge.
+      child: SalonSearchField(
+        query: controller.query,
+        onSearch: controller.setQuery,
       ),
     );
   }
