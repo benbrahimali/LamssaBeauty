@@ -357,9 +357,13 @@ class ProfileScreen extends StatelessWidget {
           'action': 'salon_qr',
         },
       ],
-      // Tout compte connecté peut ouvrir un salon : le backend le promeut
-      // automatiquement au rôle OWNER à la création (§3.1).
-      if (loggedIn && auth.context?.ownedSalonId == null)
+      // Ouvrir un salon demande un compte professionnel, décidé par le serveur.
+      // L'entrée s'affichait à tout compte sans salon — client comme coiffeur
+      // employé — et menait à un refus après avoir tout saisi. Un gérant
+      // installé ne la voit pas non plus : il a déjà « إدارة صالوني ».
+      if (loggedIn &&
+          auth.canCreateSalon &&
+          auth.context?.ownedSalonId == null)
         {
           'icon': Icons.add_business_rounded,
           'label': 'أنشئ صالون',
