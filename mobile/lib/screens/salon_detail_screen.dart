@@ -10,6 +10,7 @@ import '../core/env.dart';
 import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
+import '../core/directions.dart';
 
 class SalonDetailScreen extends StatefulWidget {
   final Salon salon;
@@ -289,7 +290,8 @@ class _SalonDetailScreenState extends State<SalonDetailScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Column(
-        children: rows.map((row) => Container(
+        children: [
+          ...rows.map((row) => Container(
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -311,7 +313,31 @@ class _SalonDetailScreenState extends State<SalonDetailScreen>
               ]),
             ),
           ]),
-        )).toList(),
+          )),
+          // Une adresse se lit, un itinéraire se suit : le client qui ne
+          // connaît pas le quartier arrive au salon sans chercher la rue.
+          if (hasCoordinates(salon.lat, salon.lng))
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    openDirections(context, lat: salon.lat, lng: salon.lng),
+                icon: const Icon(Icons.directions_rounded, size: 18),
+                label: Text('الطريق للصالون',
+                    style: GoogleFonts.dmSans(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.gold)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.gold,
+                  side: BorderSide(color: AppColors.gold.withValues(alpha: 0.6)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

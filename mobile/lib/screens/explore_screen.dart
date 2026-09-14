@@ -13,6 +13,7 @@ import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/map_controls.dart';
 import '../widgets/salon_search_field.dart';
+import '../core/directions.dart';
 
 class ExploreScreen extends StatefulWidget {
   final Function(Salon) onGoSalon;
@@ -425,6 +426,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 salon: selected,
                 onOpen: () => widget.onGoSalon(selected),
                 onClose: () => setState(() => _selectedId = null),
+                onDirections: () => openDirections(context,
+                    lat: selected.lat, lng: selected.lng),
               ),
             )
           else if (!controller.loading && salons.isEmpty)

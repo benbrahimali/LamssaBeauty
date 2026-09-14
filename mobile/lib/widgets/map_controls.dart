@@ -196,11 +196,15 @@ class SalonMapPreview extends StatelessWidget {
     required this.salon,
     required this.onOpen,
     required this.onClose,
+    this.onDirections,
   });
 
   final Salon salon;
   final VoidCallback onOpen;
   final VoidCallback onClose;
+
+  /// Itinéraire jusqu'au salon. Sans lui — salon sans position — pas de bouton.
+  final VoidCallback? onDirections;
 
   @override
   Widget build(BuildContext context) {
@@ -276,19 +280,53 @@ class SalonMapPreview extends StatelessWidget {
                   const SizedBox(height: 8),
                   SizedBox(
                     height: 34,
-                    child: ElevatedButton(
-                      onPressed: onOpen,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.gold,
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10)),
+                    child: Row(children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: onOpen,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.gold,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('شوف الصالون',
+                                style: AppTextStyle.dmSans(
+                                    size: 13,
+                                    weight: FontWeight.w700,
+                                    color: Colors.black)),
+                          ),
+                        ),
                       ),
-                      child: Text('شوف الصالون',
-                          style: AppTextStyle.dmSans(
-                              size: 13, weight: FontWeight.w700, color: Colors.black)),
-                    ),
+                      if (onDirections != null) ...[
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: onDirections,
+                            icon: const Icon(Icons.directions_rounded, size: 16),
+                            label: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text('الطريق',
+                                  style: AppTextStyle.dmSans(
+                                      size: 13,
+                                      weight: FontWeight.w700,
+                                      color: AppColors.gold)),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.gold,
+                              side: BorderSide(
+                                  color: AppColors.gold.withValues(alpha: 0.6)),
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ]),
                   ),
                 ],
               ),

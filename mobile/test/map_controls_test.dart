@@ -147,9 +147,39 @@ void main() {
       expect(ouvert, isFalse);
     });
 
-    testWidgets('un nom long tient sur un écran étroit', (tester) async {
+    testWidgets('« الطريق » ouvre l’itinéraire sans ouvrir la fiche',
+        (tester) async {
+      var itineraire = false, ouvert = false;
+      await tester.pumpWidget(cadre(SalonMapPreview(
+        salon: salon,
+        onOpen: () => ouvert = true,
+        onClose: () {},
+        onDirections: () => itineraire = true,
+      )));
+
+      await tester.tap(find.text('الطريق'));
+      expect(itineraire, isTrue);
+      expect(ouvert, isFalse);
+    });
+
+    testWidgets('sans itinéraire possible, pas de bouton « الطريق »',
+        (tester) async {
       await tester.pumpWidget(cadre(
-          SalonMapPreview(salon: salon, onOpen: () {}, onClose: () {}),
+          SalonMapPreview(salon: salon, onOpen: () {}, onClose: () {})));
+
+      expect(find.text('الطريق'), findsNothing);
+      expect(find.text('شوف الصالون'), findsOneWidget);
+    });
+
+    testWidgets('un nom long et deux boutons tiennent sur un écran étroit',
+        (tester) async {
+      await tester.pumpWidget(cadre(
+          SalonMapPreview(
+            salon: salon,
+            onOpen: () {},
+            onClose: () {},
+            onDirections: () {},
+          ),
           largeur: 300));
 
       expect(tester.takeException(), isNull);
