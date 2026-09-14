@@ -11,6 +11,7 @@ import '../widgets/salon_code_sheet.dart';
 import '../core/location.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
+import '../widgets/map_controls.dart';
 
 class ExploreScreen extends StatefulWidget {
   final Function(Salon) onGoSalon;
@@ -25,6 +26,12 @@ class _ExploreScreenState extends State<ExploreScreen> {
   bool _mapView = false;
   bool _locating = false;
   final _searchCtrl = TextEditingController();
+
+  /// Fond de carte choisi : plan, satellite ou mixte.
+  MapType _mapType = MapType.normal;
+
+  /// Salon touché sur la carte, dont la fiche s'affiche en bas.
+  String? _selectedId;
 
   static const _tunis = CameraPosition(target: LatLng(36.8190, 10.1658), zoom: 13.5);
 
@@ -105,20 +112,45 @@ class _ExploreScreenState extends State<ExploreScreen> {
     }
   }
 
-  Set<Marker> _markers(List<Salon> salons) => salons
-      .where((s) => s.lat != 0 || s.lng != 0)
-      .map((s) => Marker(
-            markerId: MarkerId('salon_${s.id}'),
-            position: LatLng(s.lat, s.lng),
-            infoWindow: InfoWindow(
-              title: s.name,
-              snippet: '${s.rating.toStringAsFixed(1)}⭐'
-                  '${s.distance.isEmpty ? '' : ' · ${s.distance}'}',
-              onTap: () => widget.onGoSalon(s),
-            ),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueYellow),
-          ))
-      .toSet();
+  static bool _placed(Salon s) => s.lat != 0 || s.lng != 0;
+
+  Set<Marker> _markers(List<Salon> salons) => salons.where(_placed).map((s) {
+        final choisi = s.id == _selectedId;
+        return Marker(
+          markerId: MarkerId('salon_${s.id}'),
+          position: LatLng(s.lat, s.lng),
+          // La fiche en bas de carte remplace la bulle Google : plus lisible,
+          // avec la vitrine et un bouton qu'on atteint au pouce.
+          consumeTapEvents: true,
+          onTap: () {
+            setState(() => _selectedId = s.id);
+            _mapController?.animateCamera(
+                CameraUpdate.newLatLng(LatLng(s.lat, s.lng)));
+          },
+          icon: BitmapDescriptor.defaultMarkerWithHue(
+            choisi ? BitmapDescriptor.hueOrange : BitmapDescriptor.hueYellow,
+          ),
+        );
+      }).toSet();
+
+  Salon? _selectedIn(List<Salon> salons) {
+    for (final s in salons) {
+      if (s.id == _selectedId) return s;
+    }
+    return null;
+  }
+
+  /// Cadre la carte sur tous les salons trouvés.
+  Future<void> _fitSalons(List<Salon> salons) async {
+    final cadre =
+        boundsOf(salons.where(_placed).map((s) => LatLng(s.lat, s.lng)));
+    if (cadre == null) return;
+    try {
+      await _mapController?.animateCamera(CameraUpdate.newLatLngBounds(cadre, 56));
+    } catch (_) {
+      // Carte pas encore mesurée : le cadrage attendra le prochain geste.
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,7 +166,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
           _buildViewToggle(),
           Expanded(
             child: _mapView
-                ? _buildMap(controller.salons)
+                ? _buildMap(controller)
                 : _buildList(controller),
           ),
         ],
@@ -306,28 +338,138 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  Widget _buildMap(List<Salon> salons) {
+  Widget _buildMap(SalonsController controller) {
+    final salons = controller.salons;
+    final selected = _selectedIn(salons);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 110),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: GoogleMap(
-          initialCameraPosition: _tunis,
-          markers: _markers(salons),
-          mapType: MapType.normal,
-          myLocationEnabled: true,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          onMapCreated: (controller) {
-            _mapController = controller;
-            // La position peut être arrivée avant la carte : on rattrape.
-            final cible = _centreVoulu;
-            if (cible != null) {
-              controller.moveCamera(CameraUpdate.newLatLngZoom(cible, 14));
-            }
-          },
-          style: _mapDarkStyle,
-        ),
+        child: Stack(children: [
+          GoogleMap(
+            initialCameraPosition: _tunis,
+            markers: _markers(salons),
+            mapType: _mapType,
+            // Le style sombre ne vaut que pour le plan : en mode mixte il
+            // assombrirait les noms de rues posés sur l'imagerie.
+            style: _mapType == MapType.normal ? kLamssaMapStyle : null,
+            myLocationEnabled: true,
+            myLocationButtonEnabled: false,
+            zoomControlsEnabled: false,
+            mapToolbarEnabled: false,
+            // Garde le logo Google hors de la fiche du salon.
+            padding: EdgeInsets.only(bottom: selected != null ? 130 : 0),
+            onTap: (_) {
+              if (_selectedId != null) setState(() => _selectedId = null);
+            },
+            onMapCreated: (map) {
+              _mapController = map;
+              // La position peut être arrivée avant la carte : on rattrape.
+              final cible = _centreVoulu;
+              if (cible != null) {
+                map.moveCamera(CameraUpdate.newLatLngZoom(cible, 14));
+              } else if (salons.isNotEmpty) {
+                // Sans position, montrer les salons vaut mieux qu'un centre
+                // de Tunis où il n'y en a peut-être aucun.
+                WidgetsBinding.instance
+                    .addPostFrameCallback((_) => _fitSalons(salons));
+              }
+            },
+          ),
+
+          if (controller.loading)
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: LinearProgressIndicator(
+                minHeight: 2,
+                color: AppColors.gold,
+                backgroundColor: Colors.transparent,
+              ),
+            ),
+
+          PositionedDirectional(
+            top: 12,
+            start: 12,
+            child: MapTypeSelector(
+              value: _mapType,
+              onChanged: (type) => setState(() => _mapType = type),
+            ),
+          ),
+
+          // Sous le sélecteur : côte à côte, ils ne tiendraient pas sur un
+          // petit téléphone.
+          PositionedDirectional(
+            top: 64,
+            end: 12,
+            child: Column(children: [
+              MapRoundButton(
+                icon: Icons.add_rounded,
+                size: 40,
+                tooltip: 'قرّب',
+                onTap: () => _mapController?.animateCamera(CameraUpdate.zoomIn()),
+              ),
+              const SizedBox(height: 8),
+              MapRoundButton(
+                icon: Icons.remove_rounded,
+                size: 40,
+                tooltip: 'بعّد',
+                onTap: () => _mapController?.animateCamera(CameraUpdate.zoomOut()),
+              ),
+              const SizedBox(height: 16),
+              MapRoundButton(
+                icon: Icons.my_location_rounded,
+                size: 40,
+                tooltip: 'موقعي',
+                active: controller.hasPosition,
+                onTap: () {
+                  if (!_locating) _locateMe();
+                },
+              ),
+              if (salons.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                MapRoundButton(
+                  icon: Icons.zoom_out_map_rounded,
+                  size: 40,
+                  tooltip: 'الصالونات الكل',
+                  onTap: () => _fitSalons(salons),
+                ),
+              ],
+            ]),
+          ),
+
+          if (selected != null)
+            PositionedDirectional(
+              start: 12,
+              end: 12,
+              bottom: 12,
+              child: SalonMapPreview(
+                salon: selected,
+                onOpen: () => widget.onGoSalon(selected),
+                onClose: () => setState(() => _selectedId = null),
+              ),
+            )
+          else if (!controller.loading && salons.isEmpty)
+            PositionedDirectional(
+              start: 12,
+              end: 12,
+              bottom: 16,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.card.withValues(alpha: 0.94),
+                    borderRadius: BorderRadius.circular(50),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Text('ما لقيناش صالونات في هالمنطقة',
+                      style: GoogleFonts.dmSans(fontSize: 13, color: AppColors.sub)),
+                ),
+              ),
+            ),
+        ]),
       ),
     );
   }
@@ -366,14 +508,6 @@ class _ExploreScreenState extends State<ExploreScreen> {
     );
   }
 
-  static const String _mapDarkStyle = '''[
-    {"elementType":"geometry","stylers":[{"color":"#0c0c18"}]},
-    {"elementType":"labels.text.fill","stylers":[{"color":"#746855"}]},
-    {"elementType":"labels.text.stroke","stylers":[{"color":"#0c0c18"}]},
-    {"featureType":"road","elementType":"geometry","stylers":[{"color":"#1a1a2e"}]},
-    {"featureType":"water","elementType":"geometry","stylers":[{"color":"#050510"}]},
-    {"featureType":"poi","stylers":[{"visibility":"off"}]}
-  ]''';
 }
 
 class _SalonListCard extends StatelessWidget {

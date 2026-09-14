@@ -3,6 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../core/location.dart';
 import '../theme/app_theme.dart';
+import '../widgets/map_controls.dart';
 
 /// Choisir l'emplacement exact d'un salon sur la carte (§3.1, §3.2).
 ///
@@ -123,14 +124,14 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       left: 16,
       right: 16,
       child: Row(children: [
-        _RoundButton(
+        MapRoundButton(
           icon: Icons.arrow_back_rounded,
           onTap: () => Navigator.of(context).maybePop(),
         ),
         const Spacer(),
         // Le satellite sert vraiment ici : on reconnaît un bâtiment, un coin
         // de rue — pas un plan schématique.
-        _RoundButton(
+        MapRoundButton(
           icon: _type == MapType.normal
               ? Icons.satellite_alt_rounded
               : Icons.map_rounded,
@@ -144,7 +145,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           }),
         ),
         const SizedBox(width: 10),
-        _RoundButton(icon: Icons.my_location_rounded, onTap: _goToMyPosition),
+        MapRoundButton(icon: Icons.my_location_rounded, onTap: _goToMyPosition),
       ]),
     );
   }
@@ -228,41 +229,4 @@ class PickedLocation {
   final double lat;
   final double lng;
   final String address;
-}
-
-class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    required this.icon,
-    required this.onTap,
-    this.active = false,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final bool active;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: active ? AppColors.gold : AppColors.card,
-          shape: BoxShape.circle,
-          border: Border.all(color: active ? AppColors.gold : AppColors.border),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Icon(icon,
-            size: 20, color: active ? Colors.black : AppColors.text),
-      ),
-    );
-  }
 }
