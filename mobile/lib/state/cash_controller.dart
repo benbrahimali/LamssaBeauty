@@ -295,6 +295,11 @@ class MyCashController extends ChangeNotifier {
   final SalonRepository _salons;
 
   MyCash _cashDay = const MyCash();
+
+  /// Sa paie de la semaine et son mois. Null tant que non chargés, ou si le
+  /// serveur ne répond pas : la carte se masque plutôt que d'afficher zéro.
+  PayrollLine? _week;
+  MonthBalance? _month;
   List<Advance> _advances = const [];
   List<Booking> _agenda = const [];
 
@@ -307,6 +312,8 @@ class MyCashController extends ChangeNotifier {
   String? _error;
 
   MyCash get cash => _cashDay;
+  PayrollLine? get week => _week;
+  MonthBalance? get month => _month;
   List<Advance> get advances => _advances;
   List<Booking> get agenda => _agenda;
   DateTime get agendaDay => _agendaDay;
@@ -394,6 +401,14 @@ class MyCashController extends ChangeNotifier {
       _advances = await _cash.myAdvances();
       _agenda = await _bookings.myAgenda(
           isoDate: isToday ? null : _iso(_agendaDay));
+      // La paie ne doit pas empêcher le reste du tableau de bord de s'afficher.
+      try {
+        _week = await _cash.myPayroll();
+        _month = await _cash.myBalance();
+      } on ApiException {
+        _week = null;
+        _month = null;
+      }
     } on ApiException catch (e) {
       _error = e.message;
     } finally {

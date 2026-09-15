@@ -150,6 +150,15 @@ class CashRepository {
   Future<void> cancelPayout(String payoutId) =>
       _api.delete('/cash/payroll/payouts/$payoutId');
 
+  /// Le mois du coiffeur : gagné, avances, et déjà reçu.
+  Future<MonthBalance> myBalance({int? year, int? month}) async {
+    final data = await _api.get('/cash/me/balance', query: {
+      if (year != null) 'year': year,
+      if (month != null) 'month': month,
+    }) as Map<String, dynamic>;
+    return MonthBalance.fromJson(data);
+  }
+
   /// La même semaine, vue par le coiffeur : ce qu'il touchera.
   Future<PayrollLine> myPayroll({DateTime? weekOf}) async {
     final data = await _api.get('/cash/me/payroll', query: {
@@ -791,5 +800,44 @@ class Pilot {
         onTrack: json['on_track'] as bool?,
         tipStaffPct: (json['tip_staff_pct'] as num?)?.toDouble() ?? 100,
         defaultSplitPct: (json['default_split_pct'] as num?)?.toDouble() ?? 50,
+      );
+}
+
+
+/// Le mois d'un coiffeur (§3.4) : ce qu'il a gagné, ses avances, ce qu'il a
+/// déjà reçu.
+class MonthBalance {
+  const MonthBalance({
+    this.period = '',
+    this.services = 0,
+    this.earned = 0,
+    this.tips = 0,
+    this.advances = 0,
+    this.balance = 0,
+    this.paid = 0,
+  });
+
+  final String period;
+  final int services;
+  final double earned;
+  final double tips;
+  final double advances;
+
+  /// Gagné + pourboires − avances.
+  final double balance;
+
+  /// Remis ce mois-ci par le gérant.
+  final double paid;
+
+  double get earnedWithTips => earned + tips;
+
+  factory MonthBalance.fromJson(Map<String, dynamic> json) => MonthBalance(
+        period: json['period']?.toString() ?? '',
+        services: (json['services'] as num?)?.toInt() ?? 0,
+        earned: (json['earned'] as num?)?.toDouble() ?? 0,
+        tips: (json['tips'] as num?)?.toDouble() ?? 0,
+        advances: (json['advances'] as num?)?.toDouble() ?? 0,
+        balance: (json['balance'] as num?)?.toDouble() ?? 0,
+        paid: (json['paid'] as num?)?.toDouble() ?? 0,
       );
 }

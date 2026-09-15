@@ -803,6 +803,16 @@ async def staff_month_balance(staff: StaffMember, year: int, month: int) -> dict
         Advance.requested_at < end,
     ).to_list()
 
+    # Ce qui lui a été remis ce mois-ci, quelle que soit la semaine payée :
+    # sans ce chiffre, « 600 DT » se lirait comme dû alors qu'il en a peut-être
+    # déjà touché 450.
+    versements = await StaffPayout.find(
+        {
+            "staff_id": staff.id,
+            "day": {"$gte": to_local(start).date(), "$lt": to_local(end).date()},
+        }
+    ).to_list()
+
     earned = round(sum(t.staff_share for t in txs), 2)
     tips = round(sum(t.tip for t in txs), 2)
     advanced = round(sum(a.amount for a in advances), 2)
@@ -814,4 +824,5 @@ async def staff_month_balance(staff: StaffMember, year: int, month: int) -> dict
         "tips": tips,
         "advances": advanced,
         "balance": round(earned + tips - advanced, 2),
+        "paid": round(sum(v.amount for v in versements), 2),
     }

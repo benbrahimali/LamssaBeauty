@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/walk_in_sheet.dart';
+import '../widgets/my_pay_card.dart';
 
 /// Espace coiffeur : SON planning, SA caisse, SES tséb9as (§3.4).
 /// Aucune donnée du salon n'est visible ici — le backend le refuse d'ailleurs.
@@ -191,6 +192,14 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
             else ...[
               if (!widget.showAgendaOnly)
                 SliverToBoxAdapter(child: _buildKpis(controller)),
+                // Ce qu'il touchera : sa première question en fin de semaine.
+                SliverToBoxAdapter(
+                  child: MyPayCard(
+                    week: controller.week,
+                    month: controller.month,
+                    onTap: () => MyPaySheet.show(context),
+                  ),
+                ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(24, 24, 24, 14),
