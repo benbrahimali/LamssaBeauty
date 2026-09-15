@@ -369,6 +369,10 @@ class Treasury {
   const Treasury({
     this.day = '',
     this.openingFloat = 0,
+    this.carriedFloat = 0,
+    this.openingDeclared = false,
+    this.openingGap = 0,
+    this.openingMovementId,
     this.cashIn = 0,
     this.deposits = 0,
     this.cashExpenses = 0,
@@ -389,6 +393,19 @@ class Treasury {
 
   final String day;
   final double openingFloat;
+
+  /// Ce que la veille a laissé dans le tiroir — le montant proposé.
+  final double carriedFloat;
+
+  /// Le gérant a déclaré lui-même le fond de caisse du jour.
+  final bool openingDeclared;
+
+  /// Fond déclaré moins fond reporté : négatif s'il manque de l'argent.
+  final double openingGap;
+
+  /// Mouvement à supprimer pour revenir au montant de la veille.
+  final String? openingMovementId;
+
   final double cashIn;
   final double deposits;
   final double cashExpenses;
@@ -412,6 +429,10 @@ class Treasury {
   factory Treasury.fromJson(Map<String, dynamic> json) => Treasury(
         day: json['day']?.toString() ?? '',
         openingFloat: (json['opening_float'] as num?)?.toDouble() ?? 0,
+        carriedFloat: (json['carried_float'] as num?)?.toDouble() ?? 0,
+        openingDeclared: json['opening_declared'] == true,
+        openingGap: (json['opening_gap'] as num?)?.toDouble() ?? 0,
+        openingMovementId: json['opening_movement_id']?.toString(),
         cashIn: (json['cash_in'] as num?)?.toDouble() ?? 0,
         deposits: (json['deposits'] as num?)?.toDouble() ?? 0,
         cashExpenses: (json['cash_expenses'] as num?)?.toDouble() ?? 0,

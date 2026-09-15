@@ -18,7 +18,7 @@ from app.models.documents import (
     StaffMember,
     User,
 )
-from app.models.enums import NotificationType, Role
+from app.models.enums import CashMovementType, NotificationType, Role
 from app.schemas.cash import (
     CashMovementCreate,
     ClosureCreate,
@@ -365,6 +365,23 @@ async def create_movement(
             status.HTTP_409_CONFLICT,
             f"La journée du {day} est clôturée : aucun mouvement ne peut s'y ajouter",
         )
+
+    # Un seul fond de caisse par jour : le corriger remplace la déclaration
+    # précédente au lieu d'en empiler une seconde, que personne ne saurait
+    # départager.
+    if body.type is CashMovementType.OPENING_FLOAT:
+        existant = await CashMovement.find_one(
+            CashMovement.salon_id == body.salon_id,
+            CashMovement.day == day,
+            CashMovement.type == CashMovementType.OPENING_FLOAT,
+        )
+        if existant is not None:
+            existant.amount = round(body.amount, 2)
+            existant.label = body.label.strip()
+            existant.created_by = user.id
+            existant.created_at = utcnow()
+            await existant.save()
+            return existant
 
     movement = CashMovement(
         salon_id=body.salon_id,

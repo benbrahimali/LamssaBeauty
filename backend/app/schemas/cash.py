@@ -1,7 +1,7 @@
 from datetime import date, datetime
 
 from beanie import PydanticObjectId
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.enums import CashMovementType, ChargePeriod, PaymentSource
 
@@ -44,9 +44,17 @@ class CashMovementCreate(BaseModel):
     """Fond de caisse, apport ou prélèvement — le sens vient du type."""
     salon_id: PydanticObjectId
     type: CashMovementType
-    amount: float = Field(gt=0, le=100000)
+    amount: float = Field(ge=0, le=100000)
     label: str = Field(default="", max_length=120)
     day: date | None = None
+
+    @model_validator(mode="after")
+    def _montant_selon_le_type(self):
+        # Un tiroir peut ouvrir vide : un fond de caisse à zéro est une vraie
+        # déclaration. Un apport ou un prélèvement de zéro, lui, ne veut rien dire.
+        if self.type is not CashMovementType.OPENING_FLOAT and self.amount <= 0:
+            raise ValueError("Le montant d'un apport ou d'un prélèvement doit être positif")
+        return self
 
 
 class StaffCashRow(BaseModel):

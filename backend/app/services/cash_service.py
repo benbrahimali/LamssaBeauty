@@ -165,25 +165,46 @@ def drawer_balance(
     )
 
 
-async def opening_float(salon_id: PydanticObjectId, day: date) -> float:
-    """Ce que le tiroir contenait en ouvrant.
+def float_gap(declared: float | None, carried: float) -> float:
+    """Écart entre le fond déclaré le matin et ce qui restait la veille.
 
-    Le gérant peut l'avoir déclaré ; sinon c'est ce qu'il a laissé en fermant
-    la veille. À défaut de tout historique, zéro — un fond de caisse inventé
-    fausserait le premier écart constaté.
+    Positif : il y a plus d'argent qu'à la fermeture ; négatif : il en manque.
+    Un tiroir qui change pendant la nuit doit se voir — le déclarer ne doit pas
+    effacer la différence en silence. Zéro tant que rien n'est déclaré.
     """
-    declared = await CashMovement.find(
-        CashMovement.salon_id == salon_id,
-        CashMovement.day == day,
-        CashMovement.type == CashMovementType.OPENING_FLOAT,
-    ).sort("-created_at").first_or_none()
-    if declared is not None:
-        return round(declared.amount, 2)
+    if declared is None:
+        return 0.0
+    return round(declared - carried, 2)
 
+
+async def carried_float(salon_id: PydanticObjectId, day: date) -> float:
+    """Ce qui restait dans le tiroir à la dernière clôture avant ce jour.
+
+    À défaut de tout historique, zéro — un fond de caisse inventé fausserait le
+    premier écart constaté.
+    """
     previous = await CashClosure.find(
         CashClosure.salon_id == salon_id, CashClosure.day < day
     ).sort("-day").first_or_none()
     return round(previous.closing_float, 2) if previous else 0.0
+
+
+async def declared_float(salon_id: PydanticObjectId, day: date) -> CashMovement | None:
+    """Le fond de caisse déclaré par le gérant ce jour-là, s'il l'a fait."""
+    return await CashMovement.find(
+        CashMovement.salon_id == salon_id,
+        CashMovement.day == day,
+        CashMovement.type == CashMovementType.OPENING_FLOAT,
+    ).sort("-created_at").first_or_none()
+
+
+async def opening_float(salon_id: PydanticObjectId, day: date) -> float:
+    """Ce que le tiroir contenait en ouvrant : le montant déclaré par le
+    gérant, sinon ce qu'il a laissé en fermant la veille."""
+    declared = await declared_float(salon_id, day)
+    if declared is not None:
+        return round(declared.amount, 2)
+    return await carried_float(salon_id, day)
 
 
 async def treasury(salon_id: PydanticObjectId, day: date) -> dict:
@@ -249,7 +270,9 @@ async def treasury(salon_id: PydanticObjectId, day: date) -> dict:
         sum(m.amount for m in movements if m.type == CashMovementType.WITHDRAWAL), 2
     )
 
-    ouverture = await opening_float(salon_id, day)
+    reporte = await carried_float(salon_id, day)
+    declare = await declared_float(salon_id, day)
+    ouverture = round(declare.amount, 2) if declare is not None else reporte
     attendu = drawer_balance(
         ouverture, cash_in, deposits, cash_expenses, cash_advances, withdrawals
     )
@@ -261,6 +284,12 @@ async def treasury(salon_id: PydanticObjectId, day: date) -> dict:
     return {
         "day": day.isoformat(),
         "opening_float": ouverture,
+        # Ce que la veille a laissé, et si le gérant a corrigé ce montant :
+        # l'app propose le premier et signale l'écart avec le second.
+        "carried_float": reporte,
+        "opening_declared": declare is not None,
+        "opening_gap": float_gap(declare.amount if declare else None, reporte),
+        "opening_movement_id": str(declare.id) if declare else None,
         "cash_in": cash_in,
         "deposits": deposits,
         "cash_expenses": cash_expenses,
@@ -282,6 +311,9 @@ async def treasury(salon_id: PydanticObjectId, day: date) -> dict:
                 "created_at": m.created_at,
             }
             for m in movements
+            # Le fond de caisse a sa propre ligne : le lister ici le ferait
+            # passer pour un apport de plus.
+            if m.type != CashMovementType.OPENING_FLOAT
         ],
         "closed": closure is not None,
         "counted_cash": closure.counted_cash if closure else None,

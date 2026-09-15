@@ -150,7 +150,7 @@ class _TreasurySheetState extends State<TreasurySheet> {
                 : AppColors.border),
       ),
       child: Column(children: [
-        _line('فلوس البداية', t.openingFloat),
+        _buildOpening(t),
         _line('مداخيل كاش', t.cashIn, positif: true),
         if (t.deposits > 0) _line('زادة فلوس', t.deposits, positif: true),
         if (t.cashExpenses > 0) _line('مصاريف بالكاش', -t.cashExpenses),
@@ -208,6 +208,111 @@ class _TreasurySheetState extends State<TreasurySheet> {
                 color: manque ? AppColors.red : AppColors.gold)),
       ]),
     );
+  }
+
+  // ── Le fond de caisse ────────────────────────────────────────────────────
+  /// Reporté de la veille, ou corrigé par le gérant.
+  ///
+  /// Modifiable tant que la journée n'est pas clôturée. Une correction ne
+  /// cache jamais l'écart avec la veille : un tiroir qui a changé pendant la
+  /// nuit doit se voir, pas se corriger en silence.
+  Widget _buildOpening(Treasury t) {
+    final ecart = openingGapLabel(t.openingGap);
+    final ligne = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(children: [
+        Expanded(
+          child: Text(
+            t.openingDeclared ? 'فلوس البداية (مصرّح بيها)' : 'فلوس البداية',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTextStyle.dmSans(size: 12, color: AppColors.sub),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text('${t.openingFloat.toStringAsFixed(2)} DT',
+            style: AppTextStyle.dmSans(size: 12, weight: FontWeight.w700)),
+        if (!t.closed) ...[
+          const SizedBox(width: 6),
+          const Icon(Icons.edit_rounded, size: 14, color: AppColors.gold),
+        ],
+      ]),
+    );
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (t.closed)
+        ligne
+      else
+        Semantics(
+          button: true,
+          label: 'بدّل فلوس البداية',
+          child: InkWell(
+            onTap: () => _editOpening(t),
+            borderRadius: BorderRadius.circular(8),
+            child: ligne,
+          ),
+        ),
+      if (ecart.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Text(
+            '⚠️ $ecart',
+            style: AppTextStyle.dmSans(
+                size: 11,
+                color: t.openingGap < 0 ? AppColors.red : AppColors.gold),
+          ),
+        ),
+    ]);
+  }
+
+  Future<void> _editOpening(Treasury t) async {
+    final saisie = await PromptDialog.show(
+      context,
+      title: 'فلوس البداية',
+      message: t.carriedFloat > 0
+          ? 'شحال فمّا في الدرج كي حلّيت ؟ البارح بقات '
+              '${t.carriedFloat.toStringAsFixed(2)} DT'
+          : 'شحال فمّا في الدرج كي حلّيت ؟',
+      fields: [
+        PromptField(
+          name: 'montant',
+          hint: 'القيمة بالدينار',
+          initial: t.openingFloat.toStringAsFixed(2),
+          numeric: true,
+          autofocus: true,
+        ),
+      ],
+      neutralLabel: t.openingDeclared ? 'رجّع مبلغ البارح' : null,
+    );
+    if (saisie == null || !mounted) return;
+    final cash = context.read<CashController>();
+
+    if (saisie.neutral) {
+      final id = t.openingMovementId;
+      if (id == null) return;
+      final ok = await cash.removeMovementById(id);
+      if (!mounted) return;
+      if (!ok) {
+        showAppSnack(context, cash.error ?? 'ما تبدّلش');
+        return;
+      }
+      await _load();
+      return;
+    }
+
+    final valeur = saisie.number('montant');
+    // Zéro est une vraie réponse : le tiroir peut ouvrir vide.
+    if (valeur == null || valeur < 0) {
+      showAppSnack(context, 'قيمة غالطة');
+      return;
+    }
+    final ok = await cash.addMovement(type: 'opening_float', amount: valeur);
+    if (!mounted) return;
+    if (!ok) {
+      showAppSnack(context, cash.error ?? 'ما تسجّلش');
+      return;
+    }
+    await _load();
   }
 
   // ── La banque ────────────────────────────────────────────────────────────
@@ -435,4 +540,14 @@ class _TreasurySheetState extends State<TreasurySheet> {
     if (!mounted) return;
     await _load();
   }
+}
+
+/// Écart du fond de caisse avec ce que la veille a laissé, en clair.
+/// Vide quand il n'y en a pas.
+String openingGapLabel(double gap) {
+  if (gap.abs() < 0.01) return '';
+  final montant = gap.abs().toStringAsFixed(2);
+  return gap < 0
+      ? '$montant DT أقل من اللي بقى البارح'
+      : '$montant DT أكثر من اللي بقى البارح';
 }
