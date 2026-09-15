@@ -10,11 +10,13 @@ from app.core.security import current_user
 from app.core.timeutils import local_day_bounds, to_local, utcnow
 from app.models.documents import (
     Booking,
+    CashClosure,
     Salon,
     Service,
     StaffMember,
     Transaction,
     User,
+    VoidedTransaction,
     salon_is_public,
 )
 from app.models.enums import (
@@ -22,10 +24,16 @@ from app.models.enums import (
     BookingSource,
     BookingStatus,
     NotificationType,
+    PaymentMethod,
     PaymentStatus,
     Role,
 )
-from app.schemas.booking import BookingComplete, BookingCreate, BookingStatusPatch
+from app.schemas.booking import (
+    BookingComplete,
+    BookingCreate,
+    BookingStatusPatch,
+    PaymentVoid,
+)
 from app.services.booking_service import (
     apply_transition,
     assert_can_cancel,
@@ -36,6 +44,19 @@ from app.services.notification_service import notify, notify_many
 from app.services.split_engine import SplitEngine
 
 router = APIRouter()
+
+
+def void_refusal(*, day_closed: bool, method: PaymentMethod) -> str | None:
+    """Pourquoi un encaissement ne peut pas être annulé — None s'il le peut."""
+    if day_closed:
+        # Le rapport de clôture est une pièce comptable : le modifier après
+        # coup rendrait faux un document déjà remis.
+        return "La journée est clôturée : cet encaissement est figé dans le rapport."
+    if method is PaymentMethod.ONLINE:
+        # L'argent est chez le prestataire de paiement : l'effacer ici sans
+        # rembourser le client laisserait les deux côtés en désaccord.
+        return "Paiement en ligne : remboursez-le au lieu d'annuler l'encaissement."
+    return None
 
 
 async def _load_booking(booking_id: PydanticObjectId) -> Booking:
@@ -311,3 +332,86 @@ async def complete(
             "salon_tip": split.salon_tip,
         },
     }
+
+
+@router.post("/{booking_id}/void-payment", summary="Annuler un encaissement erroné")
+async def void_payment(
+    booking_id: PydanticObjectId,
+    body: PaymentVoid,
+    user: User = Depends(current_user),
+):
+    """Retire un encaissement mal saisi pour le refaire au bon montant.
+
+    Réservé au gérant du salon : un coiffeur ne doit pas pouvoir effacer ce
+    qu'il a encaissé. Le coiffeur concerné est prévenu — sa part change, il
+    doit le savoir.
+
+    Le RDV repasse « en cours », hors machine à états et volontairement : ce
+    n'est pas une prestation qui se défait, c'est une saisie qui se corrige,
+    et le ré-encaissement repasse par le parcours normal.
+    """
+    booking = await _load_booking(booking_id)
+    salon = await get_salon(booking.salon_id)
+    if user.role is not Role.OWNER or salon.owner_id != user.id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Seul le gérant du salon peut annuler un encaissement",
+        )
+
+    tx = await Transaction.find_one(Transaction.booking_id == booking.id)
+    if tx is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Aucun encaissement pour ce RDV")
+
+    cloture = tx.closed or (
+        await CashClosure.find_one(
+            CashClosure.salon_id == tx.salon_id,
+            CashClosure.day == to_local(tx.paid_at).date(),
+        )
+        is not None
+    )
+    refus = void_refusal(day_closed=cloture, method=tx.method)
+    if refus:
+        raise HTTPException(status.HTTP_409_CONFLICT, refus)
+
+    # L'archive d'abord : si la suppression échoue ensuite, on a une trace en
+    # double, jamais un encaissement disparu sans trace.
+    archive = VoidedTransaction(
+        transaction_id=tx.id,
+        booking_id=tx.booking_id,
+        salon_id=tx.salon_id,
+        staff_id=tx.staff_id,
+        amount=tx.amount,
+        method=tx.method,
+        salon_share=tx.salon_share,
+        staff_share=tx.staff_share,
+        salon_tip=tx.salon_tip,
+        tip=tx.tip,
+        paid_at=tx.paid_at,
+        voided_by=user.id,
+        reason=body.reason.strip(),
+    )
+    await archive.insert()
+    await tx.delete()
+
+    booking.status = BookingStatus.IN_PROGRESS
+    booking.payment_status = PaymentStatus.NONE
+    booking.note = f"{booking.note} | encaissement annulé: {archive.reason}".strip(" |")
+    booking.updated_at = utcnow()
+    await booking.save()
+
+    staff = await StaffMember.get(tx.staff_id)
+    if staff:
+        staff.cuts_count = max(0, staff.cuts_count - 1)
+        await staff.save()
+        if staff.user_id != user.id:
+            await notify(
+                staff.user_id,
+                NotificationType.PAYMENT_VOIDED,
+                "Encaissement annulé",
+                f"{tx.amount:.2f} DT — {archive.reason}. Votre part "
+                f"({tx.staff_share + tx.tip:.2f} DT) est retirée jusqu'au "
+                "nouvel encaissement.",
+                {"booking_id": str(booking.id)},
+            )
+
+    return {"booking": booking, "voided": archive}

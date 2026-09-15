@@ -227,6 +227,12 @@ class SalonAdminRepository {
   Future<void> refund(String paymentId) =>
       _api.post('/payments/$paymentId/refund');
 
+  /// Annule un encaissement mal saisi : le RDV repasse « en cours » et se
+  /// ré-encaisse au bon montant. Réservé au gérant, refusé sur une journée
+  /// clôturée ou un paiement en ligne.
+  Future<void> voidPayment(String bookingId, String reason) =>
+      _api.post('/bookings/$bookingId/void-payment', body: {'reason': reason});
+
   /// Classement interne de l'équipe (§3.5) — coupes puis note.
   ///
   /// Réservé au gérant : un classement public exposerait les coiffeurs les

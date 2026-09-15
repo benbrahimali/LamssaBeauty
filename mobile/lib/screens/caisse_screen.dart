@@ -16,6 +16,7 @@ import '../widgets/closure_dialog.dart';
 import '../widgets/treasury_sheet.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/walk_in_sheet.dart';
+import '../widgets/prompt_dialog.dart';
 
 /// Caisse du salon (§3.4) : encaissement, split par employé, clôture de journée.
 class CaisseScreen extends StatefulWidget {
@@ -326,6 +327,47 @@ class _CaisseScreenState extends State<CaisseScreen> {
         ),
       ),
     );
+  }
+
+  /// Annule un encaissement mal saisi, pour le refaire au bon montant (§3.4).
+  ///
+  /// La raison est demandée à chaque fois : elle reste dans l'archive et part
+  /// au coiffeur, dont la part change.
+  Future<void> _voidPayment(Booking booking) async {
+    final saisie = await PromptDialog.show(
+      context,
+      title: 'صلّح الخلاص ؟',
+      message: '${booking.price.toStringAsFixed(0)} DT لـ ${booking.clientName}.\n'
+          'الخلاص يتنحّى والموعد يرجع « قاعد يصير » باش تخلّصو من جديد '
+          'بالمبلغ الصحيح. الحجام يوصلو إشعار.',
+      fields: const [
+        PromptField(
+          name: 'raison',
+          hint: 'علاش ؟ مثلا : غلطت في المبلغ',
+          autofocus: true,
+        ),
+      ],
+      confirmLabel: 'نحّي الخلاص',
+    );
+    if (saisie == null || !mounted) return;
+
+    final raison = saisie['raison'];
+    if (raison.length < 3) {
+      showAppSnack(context, 'اكتب السبب باش يبقى أثر');
+      return;
+    }
+
+    try {
+      await context.read<SalonAdminRepository>().voidPayment(booking.id, raison);
+      if (!mounted) return;
+      await context.read<CashController>().load();
+      if (mounted) {
+        showAppSnack(context, 'تنحّى الخلاص — خلّص من جديد بالمبلغ الصحيح',
+            success: true);
+      }
+    } on ApiException catch (e) {
+      if (mounted) showAppSnack(context, e.message);
+    }
   }
 
   /// Rembourse un paiement en ligne (§3.6).
@@ -687,6 +729,22 @@ class _CaisseScreenState extends State<CaisseScreen> {
                       padding: EdgeInsets.only(left: 10),
                       child: Icon(Icons.undo_rounded,
                           size: 18, color: AppColors.sub),
+                    ),
+                  ),
+                // Une journée clôturée est figée : proposer la correction
+                // mènerait à un refus du serveur.
+                if (booking.voidable && !cash.day.closed)
+                  Semantics(
+                    button: true,
+                    label: 'صلّح الخلاص',
+                    child: GestureDetector(
+                      onTap: () => _voidPayment(booking),
+                      behavior: HitTestBehavior.opaque,
+                      child: const Padding(
+                        padding: EdgeInsets.only(left: 10),
+                        child: Icon(Icons.edit_note_rounded,
+                            size: 20, color: AppColors.sub),
+                      ),
                     ),
                   ),
               ]),

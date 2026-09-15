@@ -837,6 +837,12 @@ class Booking {
   /// le reste en 409.
   bool get refundable => paid && paymentId != null && paymentId!.isNotEmpty;
 
+  /// Encaissement en espèces ou par carte, annulable s'il a été mal saisi.
+  ///
+  /// Un paiement en ligne se rembourse, il ne s'annule pas : l'argent est chez
+  /// le prestataire, et le serveur refuserait le geste.
+  bool get voidable => status == BookingStatus.done && paid && !refundable;
+
   bool get isActive =>
       status == BookingStatus.pending ||
       status == BookingStatus.confirmed ||

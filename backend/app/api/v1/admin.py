@@ -28,6 +28,7 @@ from app.models.documents import (
     StaffMember,
     Transaction,
     User,
+    VoidedTransaction,
 )
 from app.models.enums import (
     NotificationType,
@@ -58,6 +59,7 @@ HISTORIQUE = (
     RecurringCharge,
     Advance,
     CashMovement,
+    VoidedTransaction,
 )
 
 

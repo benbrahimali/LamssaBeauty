@@ -677,6 +677,38 @@ class Notification(Document):
         ]
 
 
+class VoidedTransaction(Document):
+    """Encaissement annulé par le gérant (§3.4).
+
+    Une erreur de saisie — 250 DT au lieu de 25 — faussait la caisse, la part
+    du coiffeur, la clôture et la paie, sans aucun moyen de la corriger.
+    L'encaissement fautif quitte les transactions, qui ne contiennent donc
+    jamais que de l'argent réellement reçu : aucun calcul n'a à le filtrer.
+    Il est conservé ici, avec l'auteur et la raison, pour qu'une annulation ne
+    puisse jamais effacer une trace.
+    """
+    transaction_id: PydanticObjectId
+    booking_id: PydanticObjectId
+    salon_id: PydanticObjectId
+    staff_id: PydanticObjectId
+    amount: float
+    method: PaymentMethod
+    salon_share: float
+    staff_share: float
+    salon_tip: float = 0.0
+    tip: float = 0.0
+    paid_at: datetime
+    voided_at: datetime = Field(default_factory=utcnow)
+    voided_by: PydanticObjectId
+    reason: str
+
+    class Settings:
+        name = "voided_transactions"
+        indexes = [
+            IndexModel([("salon_id", pymongo.ASCENDING), ("voided_at", pymongo.ASCENDING)]),
+        ]
+
+
 ALL_DOCUMENTS = [
     User,
     Salon,
@@ -695,4 +727,5 @@ ALL_DOCUMENTS = [
     RecurringCharge,
     Reel,
     Notification,
+    VoidedTransaction,
 ]

@@ -118,6 +118,7 @@ class NotificationType(str, Enum):
     SALON_VERIFIED = "salon_verified"
     SALON_REJECTED = "salon_rejected"
     SALON_PENDING = "salon_pending"      # à l'administrateur : un salon attend
+    PAYMENT_VOIDED = "payment_voided"    # au coiffeur : un encaissement a été annulé
 
 
 class ChargePeriod(str, Enum):

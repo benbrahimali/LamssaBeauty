@@ -37,6 +37,12 @@ class BookingComplete(BaseModel):
     override_reason: str = ""
 
 
+class PaymentVoid(BaseModel):
+    """Annulation d'un encaissement erroné : la raison est obligatoire, elle
+    reste attachée à l'archive et part au coiffeur concerné."""
+    reason: str = Field(min_length=3, max_length=200)
+
+
 class BookingOut(BaseModel):
     id: str
     salon_id: str
