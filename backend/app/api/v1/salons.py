@@ -4,6 +4,7 @@ from datetime import datetime
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi.encoders import jsonable_encoder
 
 from app.core.config import settings
 from app.core.deps import can_see_salon, get_salon, owned_salon
@@ -202,6 +203,21 @@ async def salon_detail(
     return await _salon_detail(salon)
 
 
+def attach_avatars(staff: list[dict], avatars: dict[str, str | None]) -> list[dict]:
+    """Ajoute à chaque membre la photo de son compte, retrouvée par `user_id`."""
+    return [{**m, "avatar_url": avatars.get(str(m.get("user_id")))} for m in staff]
+
+
+async def _staff_with_avatars(staff: list[StaffMember]) -> list[dict]:
+    """L'équipe telle que l'app l'affiche : les cartes montrent le visage du
+    coiffeur, pas seulement ses initiales. La photo vit sur le compte, pas sur
+    la fiche d'équipe — un coiffeur qui change de salon la garde."""
+    comptes = await User.find({"_id": {"$in": [m.user_id for m in staff]}}).to_list()
+    return attach_avatars(
+        jsonable_encoder(staff), {str(u.id): u.avatar_url for u in comptes}
+    )
+
+
 async def _salon_detail(salon: Salon):
     salon_id = salon.id
     staff = await StaffMember.find(StaffMember.salon_id == salon_id).to_list()
@@ -219,7 +235,7 @@ async def _salon_detail(salon: Salon):
     return {
         "salon": salon,
         "is_open_now": is_open_now(salon),
-        "staff": staff,
+        "staff": await _staff_with_avatars(staff),
         "services": services,
         "reviews": reviews,
     }
@@ -407,7 +423,9 @@ async def delete_service(service_id: PydanticObjectId, salon: Salon = Depends(ow
 # ─────────────────────────────────────────────────────────────────────────────
 @router.get("/{salon_id}/staff", summary="Équipe du salon")
 async def list_staff(salon_id: PydanticObjectId):
-    return await StaffMember.find(StaffMember.salon_id == salon_id).to_list()
+    return await _staff_with_avatars(
+        await StaffMember.find(StaffMember.salon_id == salon_id).to_list()
+    )
 
 
 @router.post("/{salon_id}/staff", status_code=201, summary="Inviter un membre d'équipe")

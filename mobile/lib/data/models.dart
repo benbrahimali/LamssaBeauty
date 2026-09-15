@@ -217,6 +217,9 @@ class Coiffeur {
   /// pendant qu'un coiffeur se repose le lundi.
   final List<String> daysOff;
 
+  /// Photo du compte du coiffeur ; null sans photo, on affiche les initiales.
+  final String? avatarUrl;
+
   const Coiffeur({
     required this.id,
     required this.name,
@@ -233,6 +236,7 @@ class Coiffeur {
     this.chairNumber = 1,
     this.commissionPct = 50,
     this.daysOff = const [],
+    this.avatarUrl,
   });
 
   String get initials => initialsOf(name);
@@ -263,6 +267,7 @@ class Coiffeur {
       daysOff:
           (json['days_off'] as List?)?.map((e) => e.toString()).toList() ??
               const [],
+      avatarUrl: _urlOrNull(json['avatar_url']),
     );
   }
 }
@@ -887,6 +892,13 @@ extension AppRoleExt on AppRole {
   }
 }
 
+/// URL de photo, ou null : une chaîne vide ferait tenter un chargement voué à
+/// l'échec au lieu d'afficher les initiales.
+String? _urlOrNull(Object? value) {
+  final url = value?.toString().trim() ?? '';
+  return url.isEmpty ? null : url;
+}
+
 class AppUser {
   final String id;
   final String phone;
@@ -894,12 +906,16 @@ class AppUser {
   final AppRole role;
   final String locale;
 
+  /// Photo de profil — coiffeurs et gérants seulement, null sinon.
+  final String? avatarUrl;
+
   const AppUser({
     required this.id,
     this.phone = '',
     this.name = '',
     this.role = AppRole.client,
     this.locale = 'fr',
+    this.avatarUrl,
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
@@ -908,6 +924,7 @@ class AppUser {
         name: json['name']?.toString() ?? '',
         role: AppRoleExt.parse(json['role']?.toString()),
         locale: json['locale']?.toString() ?? 'fr',
+        avatarUrl: _urlOrNull(json['avatar_url']),
       );
 
   Map<String, dynamic> toJson() => {
@@ -916,5 +933,6 @@ class AppUser {
         'name': name,
         'role': role.apiValue,
         'locale': locale,
+        'avatar_url': avatarUrl,
       };
 }

@@ -716,6 +716,7 @@ class _ManageSalonScreenState extends State<ManageSalonScreen> {
           child: Row(children: [
             InitialsAvatar(
               initials: member.initials,
+              imageUrl: member.avatarUrl,
               color: member.color,
               size: 46,
               showBadge: true,

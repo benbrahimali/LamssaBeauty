@@ -105,6 +105,16 @@ def may_self_activate_pro(*, has_staff_profile: bool) -> bool:
     return not has_staff_profile
 
 
+def may_have_avatar(*, role: Role, has_staff_profile: bool) -> bool:
+    """Photo de profil réservée aux coiffeurs et aux gérants.
+
+    Ce sont eux qu'on voit dans les cartes : les visages d'un salon font partie
+    de sa vitrine. Un client n'est affiché nulle part — lui ouvrir l'envoi
+    ferait stocker, et modérer, des photos que personne ne regarde.
+    """
+    return role is Role.OWNER or has_staff_profile
+
+
 #: Statuts qui tiennent un salon hors de la vue du public.
 HIDDEN_VERIFICATION = (SalonVerification.PENDING.value, SalonVerification.REJECTED.value)
 

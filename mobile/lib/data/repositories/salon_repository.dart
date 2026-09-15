@@ -74,7 +74,8 @@ class SalonRepository {
 
     return StaffProfile(
       coiffeur: Coiffeur.fromJson(
-        {...raw, 'name': data['name']},
+        // La photo est au niveau de la réponse, pas dans la fiche d'équipe.
+        {...raw, 'name': data['name'], 'avatar_url': data['avatar_url']},
         salonName: data['salon']?['name']?.toString() ?? '',
       ),
       services: ((data['services'] as List?) ?? const [])

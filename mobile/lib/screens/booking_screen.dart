@@ -222,6 +222,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     InitialsAvatar(
                       initials: member.initials,
+                      imageUrl: member.avatarUrl,
                       color: member.color,
                       size: 42,
                     ),

@@ -418,6 +418,7 @@ class _TeamMemberRow extends StatelessWidget {
       child: Row(children: [
         InitialsAvatar(
           initials: coiffeur.initials,
+          imageUrl: coiffeur.avatarUrl,
           color: coiffeur.color,
           size: 50,
           showBadge: true,

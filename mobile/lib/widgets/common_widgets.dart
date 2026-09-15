@@ -1,6 +1,8 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../core/env.dart';
 
 // ── Gold Primary Button ───────────────────────────────────────────
 class GoldButton extends StatelessWidget {
@@ -281,7 +283,22 @@ class InitialsAvatar extends StatelessWidget {
     this.size = 50,
     this.showBadge = false,
     this.available = true,
+    this.imageUrl,
   });
+
+  /// Photo du compte. Absente, vide ou introuvable : les initiales.
+  final String? imageUrl;
+
+  bool get _hasImage => (imageUrl ?? '').trim().isNotEmpty;
+
+  Widget _initialsText() => Text(
+        initials,
+        style: GoogleFonts.dmSans(
+          fontSize: size * 0.32,
+          fontWeight: FontWeight.w700,
+          color: Colors.black,
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -300,14 +317,20 @@ class InitialsAvatar extends StatelessWidget {
             boxShadow: [BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 12)],
           ),
           alignment: Alignment.center,
-          child: Text(
-            initials,
-            style: GoogleFonts.dmSans(
-              fontSize: size * 0.32,
-              fontWeight: FontWeight.w700,
-              color: Colors.black,
-            ),
-          ),
+          child: _hasImage
+              ? ClipOval(
+                  child: CachedNetworkImage(
+                    imageUrl: Env.mediaUrl(imageUrl!.trim()),
+                    width: size,
+                    height: size,
+                    fit: BoxFit.cover,
+                    // Pendant le chargement, ou si la photo a disparu : les
+                    // initiales, jamais un rond vide.
+                    placeholder: (_, __) => _initialsText(),
+                    errorWidget: (_, __, ___) => _initialsText(),
+                  ),
+                )
+              : _initialsText(),
         ),
         if (showBadge)
           Positioned(

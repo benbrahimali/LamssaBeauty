@@ -16,6 +16,7 @@ import 'my_portfolio_screen.dart';
 import 'privacy_screen.dart';
 import 'reels_screen.dart';
 import 'salon_qr_screen.dart';
+import '../widgets/editable_avatar.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({
@@ -78,20 +79,12 @@ class ProfileScreen extends StatelessWidget {
         ),
       ),
       child: Column(children: [
-        Container(
-          width: 90,
-          height: 90,
-          decoration: const BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: AppColors.goldGradient,
-          ),
-          alignment: Alignment.center,
-          child: Text(initialsOf(name),
-              style: GoogleFonts.playfairDisplay(
-                fontSize: 32,
-                fontWeight: FontWeight.w700,
-                color: Colors.black,
-              )),
+        // Coiffeurs et gérants : on les voit dans les cartes, ils choisissent
+        // leur photo. Un client garde ses initiales, sans pastille trompeuse.
+        EditableAvatar(
+          name: name,
+          imageUrl: !guest && auth.canHaveAvatar ? user?.avatarUrl : null,
+          editable: !guest && auth.canHaveAvatar,
         ),
         const SizedBox(height: 16),
         Text(name,

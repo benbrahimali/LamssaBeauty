@@ -257,6 +257,7 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
           ),
           InitialsAvatar(
             initials: initialsOf(name),
+            imageUrl: user?.avatarUrl,
             color: TypePalette.forId(user?.id ?? ''),
             size: 52,
             showBadge: true,

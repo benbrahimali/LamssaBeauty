@@ -174,7 +174,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
-    final user = context.watch<AuthController>().user;
+    final auth = context.watch<AuthController>();
+    final user = auth.user;
     final unread = context.watch<NotificationsController>().unread;
     final name = user?.name.trim().isNotEmpty == true ? user!.name : 'ضيف';
 
@@ -222,17 +223,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(width: 10),
-            Container(
-              width: 44, height: 44,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: AppColors.goldGradient,
-              ),
-              alignment: Alignment.center,
-              child: Text(initialsOf(name),
-                  style: GoogleFonts.dmSans(
-                    fontSize: 15, fontWeight: FontWeight.w700, color: Colors.black,
-                  )),
+            InitialsAvatar(
+              initials: initialsOf(name),
+              color: AppColors.gold,
+              size: 44,
+              imageUrl: auth.canHaveAvatar ? user?.avatarUrl : null,
             ),
           ]),
         ],
@@ -706,6 +701,7 @@ class CoiffeurCard extends StatelessWidget {
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         InitialsAvatar(
           initials: coiffeur.initials,
+          imageUrl: coiffeur.avatarUrl,
           color: coiffeur.color,
           size: avatarSize,
           showBadge: true,

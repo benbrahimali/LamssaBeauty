@@ -2,12 +2,19 @@
 import logging
 import random
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
 from app.core.config import settings
 from app.core.db import redis
 from app.core.security import create_tokens, current_user, revoke_refresh, rotate_refresh
-from app.models.documents import StaffMember, User, may_self_activate_pro
+from app.models.documents import (
+    StaffMember,
+    User,
+    may_have_avatar,
+    may_self_activate_pro,
+)
+from app.services import cloudinary_service
+from app.services.storage_service import save_image
 from app.schemas.auth import (
     AuthOut,
     DeviceToken,
@@ -169,6 +176,40 @@ async def become_pro(user: User = Depends(current_user)):
         user.pro_access_until = None
         await user.save()
     return {"can_create_salon": True}
+
+
+@router.post("/me/avatar", response_model=UserOut, summary="Changer sa photo de profil")
+async def upload_avatar(file: UploadFile, user: User = Depends(current_user)):
+    """Réservé aux coiffeurs et aux gérants — voir `may_have_avatar`.
+
+    L'ancienne photo est retirée de Cloudinary : sans ce ménage, chaque
+    changement laisserait une image orpheline, stockée et jamais affichée.
+    """
+    employe = await StaffMember.find_one(StaffMember.user_id == user.id)
+    if not may_have_avatar(role=user.role, has_staff_profile=employe is not None):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "La photo de profil est réservée aux coiffeurs et aux gérants.",
+        )
+    ancienne = user.avatar_url
+    user.avatar_url = await save_image(file, f"avatars/{user.id}")
+    await user.save()
+    await cloudinary_service.destroy(cloudinary_service.public_id_from_url(ancienne) or "")
+    return _user_out(user)
+
+
+@router.delete("/me/avatar", response_model=UserOut, summary="Retirer sa photo de profil")
+async def remove_avatar(user: User = Depends(current_user)):
+    """Ouvert à tous : retirer une photo ne doit jamais être refusé, même à
+    un coiffeur qui a quitté son salon depuis."""
+    ancienne = user.avatar_url
+    if ancienne:
+        user.avatar_url = None
+        await user.save()
+        await cloudinary_service.destroy(
+            cloudinary_service.public_id_from_url(ancienne) or ""
+        )
+    return _user_out(user)
 
 
 @router.patch("/me", response_model=UserOut, summary="Mettre à jour son profil")

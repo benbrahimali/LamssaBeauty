@@ -7,6 +7,7 @@ import '../core/api_exception.dart';
 import '../core/push_service.dart';
 import '../data/models.dart';
 import '../data/repositories/auth_repository.dart';
+import 'dart:io';
 
 enum AuthStatus { unknown, loggedOut, loggedIn }
 
@@ -208,6 +209,37 @@ class AuthController extends ChangeNotifier {
     } on ApiException catch (e) {
       return e.message;
     }
+  }
+
+  /// Photo de profil réservée aux coiffeurs et aux gérants — ceux qu'on voit
+  /// dans les cartes. Le serveur refuse les autres : ce test évite seulement
+  /// de proposer un geste voué au refus.
+  static bool canHaveAvatarFor({String? ownedSalonId, String? staffId}) =>
+      ownedSalonId != null || staffId != null;
+
+  bool get canHaveAvatar => canHaveAvatarFor(
+      ownedSalonId: _context?.ownedSalonId, staffId: _context?.staffId);
+
+  /// Change la photo, puis recharge le contexte pour l'afficher partout.
+  /// Renvoie le message d'erreur, ou null.
+  Future<String?> updateAvatar(File image) async {
+    try {
+      await _repo.uploadAvatar(image);
+    } on ApiException catch (e) {
+      return e.message;
+    }
+    await refreshContext();
+    return null;
+  }
+
+  Future<String?> removeAvatar() async {
+    try {
+      await _repo.removeAvatar();
+    } on ApiException catch (e) {
+      return e.message;
+    }
+    await refreshContext();
+    return null;
   }
 
   /// « عندي صالون » : déclare le compte professionnel, puis recharge le

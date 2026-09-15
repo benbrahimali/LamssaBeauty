@@ -63,7 +63,9 @@ class AuthOut(TokenPair):
 class MeUpdate(BaseModel):
     name: str | None = None
     locale: str | None = None
-    avatar_url: str | None = None
+    # Pas d'`avatar_url` ici : un lien libre laissait afficher n'importe quelle
+    # image hébergée ailleurs, ou un lien qui trace qui la charge. La photo
+    # passe par POST /auth/me/avatar, qui la vérifie et l'héberge.
 
 
 class DeviceToken(BaseModel):

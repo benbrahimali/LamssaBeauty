@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import '../../core/api_client.dart';
 import '../models.dart';
+import 'portfolio_repository.dart';
 
 /// Authentification OTP SMS (§3.1 du cahier des charges).
 class AuthRepository {
@@ -61,6 +64,22 @@ class AuthRepository {
   ///
   /// Refusé par le serveur (403) pour un coiffeur employé.
   Future<void> activatePro() => _api.post('/auth/me/pro');
+
+  /// Photo de profil (coiffeurs et gérants). Refusée en 403 pour un client.
+  Future<AppUser> uploadAvatar(File image) async {
+    final data = await _api.postMultipart(
+      '/auth/me/avatar',
+      field: 'file',
+      bytes: await image.readAsBytes(),
+      filename: image.path.split(RegExp(r'[/\\]')).last,
+      contentType: PortfolioRepository.contentTypeOf(image.path),
+      timeout: const Duration(seconds: 60),
+    ) as Map<String, dynamic>;
+    return AppUser.fromJson(data);
+  }
+
+  Future<AppUser> removeAvatar() async => AppUser.fromJson(
+      await _api.delete('/auth/me/avatar') as Map<String, dynamic>);
 
   Future<void> updateProfile({String? name, String? locale}) async {
     await _api.patch('/auth/me', body: {

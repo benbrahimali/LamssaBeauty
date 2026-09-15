@@ -140,6 +140,7 @@ class _CoiffeurProfileScreenState extends State<CoiffeurProfileScreen> {
       child: Column(children: [
         InitialsAvatar(
           initials: coiffeur.initials,
+          imageUrl: coiffeur.avatarUrl,
           color: coiffeur.color,
           size: 90,
           showBadge: true,

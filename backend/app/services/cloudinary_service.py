@@ -8,6 +8,7 @@ facturation suit le volume.
 Sans clés configurées, l'appelant retombe sur le disque local : le
 développement ne doit pas dépendre d'un compte externe.
 """
+import re
 import hashlib
 import logging
 import time
@@ -124,6 +125,19 @@ async def destroy(public_id: str, *, resource_type: str = "image") -> None:
     except HTTPException:
         # Un ménage raté ne doit pas faire échouer la requête de l'utilisateur.
         log.warning("Cloudinary : suppression de %s échouée", public_id)
+
+
+def public_id_from_url(url: str | None) -> str | None:
+    """Identifiant Cloudinary d'une image, retrouvé depuis son URL publique.
+
+    `…/image/upload/v1712/lamssa/avatars/u1/f00.jpg` → `lamssa/avatars/u1/f00`.
+    Rien pour une URL étrangère à Cloudinary : on ne supprime que ce qu'on a
+    soi-même envoyé.
+    """
+    if not url or "res.cloudinary.com" not in url:
+        return None
+    trouve = re.search(r"/image/upload/(?:v\d+/)?(.+)\.[A-Za-z0-9]+$", url)
+    return trouve.group(1) if trouve else None
 
 
 def thumbnail_url(video_url: str) -> str:
