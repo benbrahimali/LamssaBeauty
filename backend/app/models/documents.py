@@ -677,6 +677,35 @@ class Notification(Document):
         ]
 
 
+class StaffPayout(Document):
+    """Paie versée à un coiffeur pour une semaine (§3.4).
+
+    La paie était calculée mais jamais enregistrée : rien ne disait qui avait
+    été payé, ni quand, et une paie en espèces ne sortait pas du tiroir. Une
+    semaine peut compter plusieurs versements — un coiffeur payé mercredi qui
+    travaille encore jeudi a droit au reste.
+    """
+    salon_id: PydanticObjectId
+    staff_id: PydanticObjectId
+    week_start: date
+    week_end: date
+    amount: float
+    paid_from: PaymentSource = PaymentSource.CASH
+    # Jour local du versement : c'est lui, pas la semaine payée, qui touche le
+    # tiroir et le total banque.
+    day: date
+    paid_at: datetime = Field(default_factory=utcnow)
+    paid_by: PydanticObjectId
+    note: str = ""
+
+    class Settings:
+        name = "staff_payouts"
+        indexes = [
+            IndexModel([("staff_id", pymongo.ASCENDING), ("week_start", pymongo.ASCENDING)]),
+            IndexModel([("salon_id", pymongo.ASCENDING), ("day", pymongo.ASCENDING)]),
+        ]
+
+
 class VoidedTransaction(Document):
     """Encaissement annulé par le gérant (§3.4).
 
@@ -728,4 +757,5 @@ ALL_DOCUMENTS = [
     Reel,
     Notification,
     VoidedTransaction,
+    StaffPayout,
 ]

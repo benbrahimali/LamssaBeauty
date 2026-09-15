@@ -12,16 +12,21 @@ import 'async_states.dart';
 /// compte n'est pas ce qui a été gagné mais ce qui reste à donner : les
 /// tséb9as accordées dans la semaine sont déjà déduites.
 class PayrollSheet extends StatefulWidget {
-  const PayrollSheet({super.key, required this.salonId});
+  const PayrollSheet({super.key, required this.salonId, this.onChanged});
 
   final String salonId;
 
-  static Future<void> show(BuildContext context, String salonId) {
+  /// Appelé après un versement ou une annulation : la caisse du jour doit
+  /// refléter l'argent sorti du tiroir.
+  final VoidCallback? onChanged;
+
+  static Future<void> show(BuildContext context, String salonId,
+      {VoidCallback? onChanged}) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => PayrollSheet(salonId: salonId),
+      builder: (_) => PayrollSheet(salonId: salonId, onChanged: onChanged),
     );
   }
 
@@ -97,9 +102,15 @@ class _PayrollSheetState extends State<PayrollSheet> {
         },
         icon: const Icon(Icons.chevron_left, color: AppColors.sub),
       ),
-      Text(
-        p == null ? '…' : '${p.weekStart} → ${p.weekEnd}',
-        style: AppTextStyle.dmSans(size: 12, color: AppColors.sub),
+      // Les dates cèdent la place, jamais les flèches : sans cela la ligne
+      // déborde avec une police agrandie.
+      Flexible(
+        child: Text(
+          p == null ? '…' : '${p.weekStart} → ${p.weekEnd}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyle.dmSans(size: 12, color: AppColors.sub),
+        ),
       ),
       IconButton(
         // Pas de semaine future : il n'y a rien à y payer.
@@ -137,7 +148,11 @@ class _PayrollSheetState extends State<PayrollSheet> {
           shrinkWrap: true,
           itemCount: lignes.length,
           separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => _PayrollRow(line: lignes[i]),
+          itemBuilder: (_, i) => _PayrollRow(
+            line: lignes[i],
+            onPay: () => _pay(lignes[i]),
+            onCancel: _cancel,
+          ),
         ),
       ),
       const SizedBox(height: 14),
@@ -152,11 +167,105 @@ class _PayrollSheetState extends State<PayrollSheet> {
           _total('مجموع المكاسب', payroll.totalEarned, AppColors.text),
           const SizedBox(height: 6),
           _total('التسبيقات المعطاة', -payroll.totalAdvances, AppColors.red),
+          if (payroll.totalPaid > 0) ...[
+            const SizedBox(height: 6),
+            _total('تخلّص', -payroll.totalPaid, AppColors.green),
+          ],
           const Divider(color: AppColors.border, height: 18),
-          _total('الباقي للخلاص', payroll.totalToPay, AppColors.gold, fort: true),
+          _total('الباقي للخلاص', payroll.totalRemaining, AppColors.gold, fort: true),
         ]),
       ),
     ]);
+  }
+
+  DateTime get _weekOf => DateTime.now().add(Duration(days: 7 * _offset));
+
+  /// Remet à un coiffeur ce qui lui reste dû, en choisissant d'où sort
+  /// l'argent : le tiroir se vide, un virement non.
+  Future<void> _pay(PayrollLine line) async {
+    final nom = line.name.isEmpty ? 'الحجّام' : line.name;
+    final source = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('خلّص $nom ؟', style: AppTextStyle.playfair(size: 18)),
+        content: Text(
+          '${line.remaining.toStringAsFixed(2)} DT — منين تخرج الفلوس ؟',
+          style: AppTextStyle.dmSans(size: 13, color: AppColors.sub),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('رجوع', style: AppTextStyle.dmSans(color: AppColors.sub)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'bank'),
+            child: Text('بتحويل', style: AppTextStyle.dmSans(color: AppColors.text)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'cash'),
+            child: Text('من الدرج',
+                style: AppTextStyle.dmSans(
+                    color: AppColors.gold, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    try {
+      await context.read<CashRepository>().payStaff(
+            salonId: widget.salonId,
+            staffId: line.staffId,
+            weekOf: _weekOf,
+            paidFrom: source,
+          );
+    } on ApiException catch (e) {
+      if (mounted) showAppSnack(context, e.message);
+      return;
+    }
+    if (!mounted) return;
+    showAppSnack(context, 'تخلّص $nom ✅', success: true);
+    widget.onChanged?.call();
+    await _load();
+  }
+
+  Future<void> _cancel(PayrollPayout payout) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        title: Text('نحّي هالخلاص ؟', style: AppTextStyle.playfair(size: 18)),
+        content: Text(
+          '${payout.amount.toStringAsFixed(2)} DT'
+          '${payout.fromDrawer ? ' يرجعو للدرج' : ''}',
+          style: AppTextStyle.dmSans(size: 13, color: AppColors.sub),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('لا', style: AppTextStyle.dmSans(color: AppColors.sub)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('نعم',
+                style: AppTextStyle.dmSans(
+                    color: AppColors.red, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    try {
+      await context.read<CashRepository>().cancelPayout(payout.id);
+    } on ApiException catch (e) {
+      if (mounted) showAppSnack(context, e.message);
+      return;
+    }
+    if (!mounted) return;
+    widget.onChanged?.call();
+    await _load();
   }
 
   Widget _total(String label, double valeur, Color couleur, {bool fort = false}) {
@@ -182,9 +291,11 @@ class _PayrollSheetState extends State<PayrollSheet> {
 }
 
 class _PayrollRow extends StatelessWidget {
-  const _PayrollRow({required this.line});
+  const _PayrollRow({required this.line, this.onPay, this.onCancel});
 
   final PayrollLine line;
+  final VoidCallback? onPay;
+  final void Function(PayrollPayout)? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -214,13 +325,84 @@ class _PayrollRow extends StatelessWidget {
           ),
         ]),
         const SizedBox(height: 8),
-        Row(children: [
+        // Passe à la ligne au lieu de déborder : quatre détails ne tiennent
+        // pas sur un petit écran ou avec une police agrandie.
+        Wrap(runSpacing: 4, children: [
           _detail('${line.services} قصّة'),
           _detail('حصّتو ${line.earned.toStringAsFixed(0)}'),
           if (line.tips > 0) _detail('بقشيش ${line.tips.toStringAsFixed(0)}'),
           if (line.advances > 0)
             _detail('تسبيق ${line.advances.toStringAsFixed(0)}', rouge: true),
         ]),
+        // L'historique des versements : sans lui, rien ne dit qui a déjà été
+        // payé, et la même semaine se paie deux fois.
+        for (final p in line.payouts)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(children: [
+              Icon(
+                p.fromDrawer
+                    ? Icons.payments_rounded
+                    : Icons.account_balance_rounded,
+                size: 14,
+                color: AppColors.green,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'تخلّص ${p.amount.toStringAsFixed(2)} DT · '
+                  '${p.fromDrawer ? 'من الدرج' : 'بتحويل'}'
+                  '${p.day.isEmpty ? '' : ' · ${p.day}'}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyle.dmSans(size: 11, color: AppColors.green),
+                ),
+              ),
+              if (onCancel != null)
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  tooltip: 'نحّي هالخلاص',
+                  onPressed: () => onCancel!(p),
+                  icon: const Icon(Icons.close, size: 14, color: AppColors.sub),
+                ),
+            ]),
+          ),
+        if (line.canPay && onPay != null) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 38,
+            child: ElevatedButton.icon(
+              onPressed: onPay,
+              icon: const Icon(Icons.payments_rounded, size: 16),
+              label: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  line.paid > 0
+                      ? 'خلّص الباقي ${line.remaining.toStringAsFixed(2)} DT'
+                      : 'خلّص ${line.remaining.toStringAsFixed(2)} DT',
+                  style: AppTextStyle.dmSans(
+                      size: 13, weight: FontWeight.w700, color: Colors.black),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.gold,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ),
+        ] else if (line.fullyPaid) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text('✅ تخلّص كامل',
+                style: AppTextStyle.dmSans(
+                    size: 12, weight: FontWeight.w700, color: AppColors.green)),
+          ),
+        ],
       ]),
     );
   }

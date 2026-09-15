@@ -6,7 +6,7 @@ from beanie import PydanticObjectId
 from fastapi import HTTPException, status
 from pymongo.errors import DuplicateKeyError
 
-from app.core.timeutils import local_day_bounds, local_month_bounds, utcnow
+from app.core.timeutils import local_day_bounds, local_month_bounds, to_local, utcnow
 from app.models.documents import (
     Advance,
     CashClosure,
@@ -15,6 +15,7 @@ from app.models.documents import (
     RecurringCharge,
     Salon,
     StaffMember,
+    StaffPayout,
     Transaction,
     User,
 )
@@ -153,16 +154,44 @@ def drawer_balance(
     cash_expenses: float,
     cash_advances: float,
     withdrawals: float,
+    payouts: float = 0.0,
 ) -> float:
     """Ce que le tiroir devrait contenir, à partir de ses seules causes.
+
+    `payouts` : paies versées en espèces ce jour-là.
 
     Isolé du stockage pour rester vérifiable : c'est le chiffre que le gérant
     va comparer à ce qu'il compte à la main, et il n'a droit à aucune
     approximation.
     """
     return round(
-        opening + cash_in + deposits - cash_expenses - cash_advances - withdrawals, 2
+        opening + cash_in + deposits - cash_expenses - cash_advances - withdrawals
+        - payouts,
+        2,
     )
+
+
+def remaining_to_pay(balance: float, paid: list[float]) -> float:
+    """Ce qui reste à verser : le solde de la semaine moins les versements.
+
+    Négatif quand une tséb9a accordée après la paie a fait toucher plus que
+    gagné — le coiffeur doit alors au salon, et cela doit se voir.
+    """
+    return round(balance - sum(paid), 2)
+
+
+def payout_refusal(*, remaining: float, day_closed: bool) -> str | None:
+    """Pourquoi un versement de paie est refusé — None s'il est possible."""
+    if remaining < 0.01:
+        return (
+            "Rien à verser : la paie de la semaine est déjà réglée, "
+            "ou l'employé a reçu plus qu'il n'a gagné."
+        )
+    if day_closed:
+        # Le tiroir est compté et le total banque inscrit au rapport : un
+        # versement ce jour-là le rendrait faux, en espèces comme par virement.
+        return "La journée est clôturée : versez la paie demain."
+    return None
 
 
 def float_gap(declared: float | None, carried: float) -> float:
@@ -270,11 +299,22 @@ async def treasury(salon_id: PydanticObjectId, day: date) -> dict:
         sum(m.amount for m in movements if m.type == CashMovementType.WITHDRAWAL), 2
     )
 
+    versements = await StaffPayout.find(
+        StaffPayout.salon_id == salon_id, StaffPayout.day == day
+    ).to_list()
+    cash_payouts = round(
+        sum(p.amount for p in versements if p.paid_from == PaymentSource.CASH), 2
+    )
+    bank_payouts = round(
+        sum(p.amount for p in versements if p.paid_from == PaymentSource.BANK), 2
+    )
+
     reporte = await carried_float(salon_id, day)
     declare = await declared_float(salon_id, day)
     ouverture = round(declare.amount, 2) if declare is not None else reporte
     attendu = drawer_balance(
-        ouverture, cash_in, deposits, cash_expenses, cash_advances, withdrawals
+        ouverture, cash_in, deposits, cash_expenses, cash_advances, withdrawals,
+        payouts=cash_payouts,
     )
 
     closure = await CashClosure.find_one(
@@ -295,13 +335,15 @@ async def treasury(salon_id: PydanticObjectId, day: date) -> dict:
         "cash_expenses": cash_expenses,
         "cash_advances": cash_advances,
         "withdrawals": withdrawals,
+        "cash_payouts": cash_payouts,
         "expected_cash": attendu,
         # Côté banque : ce que le TPE et le PSP doivent verser, moins ce qui a
         # été réglé par virement. Ne touche jamais le tiroir.
         "card_total": card_total,
         "online_total": online_total,
         "bank_expenses": bank_expenses,
-        "bank_total": round(card_total + online_total - bank_expenses, 2),
+        "bank_payouts": bank_payouts,
+        "bank_total": round(card_total + online_total - bank_expenses - bank_payouts, 2),
         "movements": [
             {
                 "id": str(m.id),
@@ -693,6 +735,7 @@ async def payroll(
             "earned": 0.0,
             "tips": 0.0,
             "advances": 0.0,
+            "payouts": [],
         }
         for sid in staff_ids
     }
@@ -711,6 +754,24 @@ async def payroll(
         if ligne is not None:
             ligne["advances"] += a.amount
 
+    # Les versements sont rattachés à la semaine payée, pas au jour où ils ont
+    # eu lieu : payer lundi la semaine précédente la solde bien, elle.
+    versements = await StaffPayout.find(
+        {"staff_id": {"$in": staff_ids}, "week_start": to_local(start).date()}
+    ).to_list()
+    for v in sorted(versements, key=lambda v: v.paid_at):
+        ligne = lignes.get(v.staff_id)
+        if ligne is not None:
+            ligne["payouts"].append(
+                {
+                    "id": str(v.id),
+                    "amount": round(v.amount, 2),
+                    "paid_from": v.paid_from,
+                    "day": v.day.isoformat(),
+                    "paid_at": v.paid_at,
+                }
+            )
+
     resultat = []
     for ligne in lignes.values():
         for cle in ("gross", "earned", "tips", "advances"):
@@ -718,6 +779,9 @@ async def payroll(
         # Peut être négatif : un employé qui a pris plus d'avance qu'il n'a
         # gagné doit le voir, c'est précisément ce que la tséb9a rend possible.
         ligne["balance"] = round(ligne["earned"] + ligne["tips"] - ligne["advances"], 2)
+        verses = [v["amount"] for v in ligne["payouts"]]
+        ligne["paid"] = round(sum(verses), 2)
+        ligne["remaining"] = remaining_to_pay(ligne["balance"], verses)
         resultat.append(ligne)
 
     resultat.sort(key=lambda l: l["earned"], reverse=True)

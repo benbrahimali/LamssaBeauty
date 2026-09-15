@@ -30,6 +30,7 @@ class FauxResultat:
 
     txs: list = field(default_factory=list)
     advances: list = field(default_factory=list)
+    payouts: list = field(default_factory=list)
 
 
 @pytest.fixture
@@ -51,7 +52,11 @@ def collecte(monkeypatch):
         return FausseRequete(donnees.advances)
 
     monkeypatch.setattr(cash_service.Transaction, "find", find_tx)
+    def find_payout(*args, **kwargs):
+        return FausseRequete(donnees.payouts)
+
     monkeypatch.setattr(cash_service.Advance, "find", find_advance)
+    monkeypatch.setattr(cash_service.StaffPayout, "find", find_payout)
     return donnees
 
 
@@ -159,3 +164,56 @@ async def test_les_lignes_affichees_s_additionnent_au_total(collecte):
     assert ligne["tips"] == 3.33
     assert ligne["balance"] == 6.66
     assert ligne["balance"] == ligne["earned"] + ligne["tips"]
+
+
+@dataclass
+class FakePayout:
+    staff_id: str
+    amount: float
+    id: str = "p1"
+    paid_from: str = "cash"
+
+
+def _versement(staff_id, montant, **kw):
+    from datetime import date, datetime, timezone
+
+    v = FakePayout(staff_id, montant, **kw)
+    v.day = date(2026, 8, 29)
+    v.paid_at = datetime(2026, 8, 29, 18, tzinfo=timezone.utc)
+    return v
+
+
+@pytest.mark.asyncio
+async def test_un_versement_reduit_ce_qui_reste_a_payer(collecte):
+    """Payé 100 sur 150 : il reste 50, et la trace du versement est là."""
+    collecte.txs = [FakeTx("a", 300, 150)]
+    collecte.payouts = [_versement("a", 100)]
+
+    (ligne,) = await _payroll(["a"])
+
+    assert ligne["balance"] == 150
+    assert ligne["paid"] == 100
+    assert ligne["remaining"] == 50
+    assert [v["amount"] for v in ligne["payouts"]] == [100]
+
+
+@pytest.mark.asyncio
+async def test_sans_versement_tout_le_solde_reste_du(collecte):
+    collecte.txs = [FakeTx("a", 300, 150, tip=10)]
+
+    (ligne,) = await _payroll(["a"])
+
+    assert ligne["paid"] == 0
+    assert ligne["remaining"] == ligne["balance"] == 160
+    assert ligne["payouts"] == []
+
+
+@pytest.mark.asyncio
+async def test_le_versement_d_un_coiffeur_ne_paie_pas_l_autre(collecte):
+    collecte.txs = [FakeTx("a", 200, 100), FakeTx("b", 200, 100)]
+    collecte.payouts = [_versement("a", 100)]
+
+    lignes = {l["staff_id"]: l for l in await _payroll(["a", "b"])}
+
+    assert lignes["a"]["remaining"] == 0
+    assert lignes["b"]["remaining"] == 100

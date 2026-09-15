@@ -132,6 +132,24 @@ class CashRepository {
     return Payroll.fromJson(data);
   }
 
+  /// Verse à un coiffeur ce qui lui reste dû sur la semaine. Le montant est
+  /// calculé par le serveur : l'app ne l'envoie pas.
+  Future<void> payStaff({
+    required String salonId,
+    required String staffId,
+    DateTime? weekOf,
+    String paidFrom = 'cash',
+  }) =>
+      _api.post('/cash/payroll/pay', body: {
+        'salon_id': salonId,
+        'staff_id': staffId,
+        if (weekOf != null) 'week_of': _isoDay(weekOf),
+        'paid_from': paidFrom,
+      });
+
+  Future<void> cancelPayout(String payoutId) =>
+      _api.delete('/cash/payroll/payouts/$payoutId');
+
   /// La même semaine, vue par le coiffeur : ce qu'il touchera.
   Future<PayrollLine> myPayroll({DateTime? weekOf}) async {
     final data = await _api.get('/cash/me/payroll', query: {
@@ -490,6 +508,8 @@ class Payroll {
     this.totalEarned = 0,
     this.totalAdvances = 0,
     this.totalToPay = 0,
+    this.totalPaid = 0,
+    this.totalRemaining = 0,
   });
 
   final String weekStart;
@@ -498,6 +518,12 @@ class Payroll {
   final double totalEarned;
   final double totalAdvances;
   final double totalToPay;
+
+  /// Déjà remis aux coiffeurs cette semaine.
+  final double totalPaid;
+
+  /// Ce qu'il reste réellement à sortir.
+  final double totalRemaining;
 
   /// Les lignes sans activité ni avance encombrent la fiche d'un salon qui a
   /// beaucoup de chaises : on ne montre que ceux qui ont quelque chose.
@@ -513,6 +539,36 @@ class Payroll {
         totalEarned: (json['total_earned'] as num?)?.toDouble() ?? 0,
         totalAdvances: (json['total_advances'] as num?)?.toDouble() ?? 0,
         totalToPay: (json['total_to_pay'] as num?)?.toDouble() ?? 0,
+        totalPaid: (json['total_paid'] as num?)?.toDouble() ?? 0,
+        // Un serveur antérieur aux versements ne l'envoie pas : tout reste dû.
+        totalRemaining: (json['total_remaining'] as num?)?.toDouble() ??
+            (json['total_to_pay'] as num?)?.toDouble() ??
+            0,
+      );
+}
+
+/// Un versement de paie enregistré.
+class PayrollPayout {
+  const PayrollPayout({
+    required this.id,
+    required this.amount,
+    this.paidFrom = 'cash',
+    this.day = '',
+  });
+
+  final String id;
+  final double amount;
+  final String paidFrom;
+  final String day;
+
+  /// Sorti du tiroir plutôt que par virement.
+  bool get fromDrawer => paidFrom == 'cash';
+
+  factory PayrollPayout.fromJson(Map<String, dynamic> json) => PayrollPayout(
+        id: json['id']?.toString() ?? '',
+        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        paidFrom: json['paid_from']?.toString() ?? 'cash',
+        day: json['day']?.toString() ?? '',
       );
 }
 
@@ -529,7 +585,10 @@ class PayrollLine {
     this.balance = 0,
     this.weekStart = '',
     this.weekEnd = '',
-  });
+    this.paid = 0,
+    double? remaining,
+    this.payouts = const [],
+  }) : remaining = remaining ?? balance;
 
   final String staffId;
   final String name;
@@ -546,7 +605,21 @@ class PayrollLine {
   final String weekStart;
   final String weekEnd;
 
+  /// Déjà versé pour cette semaine.
+  final double paid;
+
+  /// Ce qui reste à remettre. Sans versement, c'est le solde.
+  final double remaining;
+
+  final List<PayrollPayout> payouts;
+
   bool get owesSalon => balance < 0;
+
+  /// Il reste de l'argent à lui remettre.
+  bool get canPay => remaining >= 0.01;
+
+  /// Tout ce qu'il a gagné cette semaine lui a été remis.
+  bool get fullyPaid => paid > 0 && remaining < 0.01;
 
   factory PayrollLine.fromJson(Map<String, dynamic> json) => PayrollLine(
         staffId: json['staff_id']?.toString() ?? '',
@@ -559,6 +632,11 @@ class PayrollLine {
         balance: (json['balance'] as num?)?.toDouble() ?? 0,
         weekStart: json['week_start']?.toString() ?? '',
         weekEnd: json['week_end']?.toString() ?? '',
+        paid: (json['paid'] as num?)?.toDouble() ?? 0,
+        remaining: (json['remaining'] as num?)?.toDouble(),
+        payouts: ((json['payouts'] as List?) ?? const [])
+            .map((e) => PayrollPayout.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
       );
 }
 

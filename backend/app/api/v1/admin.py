@@ -27,6 +27,7 @@ from app.models.documents import (
     Service,
     StaffMember,
     Transaction,
+    StaffPayout,
     User,
     VoidedTransaction,
 )
@@ -60,6 +61,7 @@ HISTORIQUE = (
     Advance,
     CashMovement,
     VoidedTransaction,
+    StaffPayout,
 )
 
 

@@ -450,7 +450,8 @@ class _CaisseScreenState extends State<CaisseScreen> {
       child: GestureDetector(
         onTap: cash.salonId == null
             ? null
-            : () => PayrollSheet.show(context, cash.salonId!),
+            : () => PayrollSheet.show(context, cash.salonId!,
+                onChanged: cash.load),
         child: Container(
           height: 48,
           decoration: BoxDecoration(

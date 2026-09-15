@@ -102,3 +102,16 @@ class RecurringChargeUpdate(BaseModel):
     period: ChargePeriod | None = None
     # Désactiver plutôt que supprimer : l'historique garde son sens.
     active: bool | None = None
+
+
+class StaffPayoutCreate(BaseModel):
+    """Verser la paie de la semaine à un coiffeur.
+
+    Aucun montant n'est fourni : le serveur verse ce qui reste dû. Un chiffre
+    tapé à la main pourrait payer deux fois la même semaine.
+    """
+    salon_id: PydanticObjectId
+    staff_id: PydanticObjectId
+    week_of: date | None = None
+    paid_from: PaymentSource = PaymentSource.CASH
+    note: str = Field(default="", max_length=200)

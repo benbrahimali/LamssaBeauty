@@ -16,15 +16,17 @@ from app.models.documents import (
     RecurringCharge,
     Salon,
     StaffMember,
+    StaffPayout,
     User,
 )
-from app.models.enums import CashMovementType, NotificationType, Role
+from app.models.enums import CashMovementType, NotificationType, PaymentSource, Role
 from app.schemas.cash import (
     CashMovementCreate,
     ClosureCreate,
     ExpenseCreate,
     RecurringChargeCreate,
     RecurringChargeUpdate,
+    StaffPayoutCreate,
 )
 from app.services.cash_service import (
     DAYS_PER_MONTH,
@@ -37,6 +39,7 @@ from app.services.cash_service import (
     profit_and_loss,
     staff_day_summary,
     staff_month_balance,
+    payout_refusal,
     treasury,
 )
 from app.services.notification_service import notify
@@ -261,6 +264,10 @@ async def team_payroll(
         "total_earned": round(sum(l["earned"] + l["tips"] for l in lignes), 2),
         "total_advances": round(sum(l["advances"] for l in lignes), 2),
         "total_to_pay": round(sum(l["balance"] for l in lignes), 2),
+        "total_paid": round(sum(l["paid"] for l in lignes), 2),
+        # Ce qu'il reste réellement à sortir : un coiffeur qui a trop touché
+        # ne réduit pas ce qu'on doit aux autres.
+        "total_remaining": round(sum(max(l["remaining"], 0) for l in lignes), 2),
     }
 
 
@@ -282,6 +289,84 @@ async def my_payroll(
         "week_end": str(to_local(end).date()),
         **lignes[0],
     }
+
+
+@router.post("/payroll/pay", status_code=201, summary="Verser la paie de la semaine")
+async def pay_staff(
+    body: StaffPayoutCreate, user: User = Depends(require_role(Role.OWNER))
+):
+    """Enregistre la paie remise à un coiffeur : ce qui reste dû sur la semaine.
+
+    En espèces, le versement sort du tiroir du jour ; par virement, du total
+    banque. Le coiffeur est prévenu : c'est sa trace à lui aussi.
+    """
+    salon = await _my_salon(body.salon_id, user)
+    membre = await StaffMember.get(body.staff_id)
+    if membre is None or membre.salon_id != salon.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur introuvable dans ce salon")
+
+    start, end = local_week_bounds(body.week_of or to_local(utcnow()).date())
+    ligne = (
+        await payroll(
+            staff_ids=[membre.id],
+            start=start,
+            end=end,
+            names={membre.id: membre.display_name},
+        )
+    )[0]
+
+    aujourdhui = to_local(utcnow()).date()
+    cloture = await CashClosure.find_one(
+        CashClosure.salon_id == salon.id, CashClosure.day == aujourdhui
+    )
+    refus = payout_refusal(remaining=ligne["remaining"], day_closed=cloture is not None)
+    if refus:
+        raise HTTPException(status.HTTP_409_CONFLICT, refus)
+
+    versement = StaffPayout(
+        salon_id=salon.id,
+        staff_id=membre.id,
+        week_start=to_local(start).date(),
+        week_end=to_local(end).date(),
+        amount=ligne["remaining"],
+        paid_from=body.paid_from,
+        day=aujourdhui,
+        paid_by=user.id,
+        note=body.note.strip(),
+    )
+    await versement.insert()
+
+    if membre.user_id != user.id:
+        await notify(
+            membre.user_id,
+            NotificationType.PAYROLL_PAID,
+            "Paie versée 💰",
+            f"{versement.amount:.2f} DT pour la semaine du "
+            f"{versement.week_start:%d/%m}"
+            + (" — en espèces" if versement.paid_from is PaymentSource.CASH else " — par virement"),
+            {"payout_id": str(versement.id)},
+        )
+    return versement
+
+
+@router.delete("/payroll/payouts/{payout_id}", summary="Annuler un versement de paie")
+async def cancel_payout(
+    payout_id: PydanticObjectId, user: User = Depends(require_role(Role.OWNER))
+):
+    """Un versement enregistré par erreur s'annule tant que sa journée n'est
+    pas clôturée : ensuite, il est inscrit au rapport."""
+    versement = await StaffPayout.get(payout_id)
+    if not versement:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Versement introuvable")
+    await _my_salon(versement.salon_id, user)
+    if await CashClosure.find_one(
+        CashClosure.salon_id == versement.salon_id, CashClosure.day == versement.day
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Journée clôturée : ce versement est figé dans le rapport"
+        )
+    await versement.delete()
+    return {"removed": str(payout_id)}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
