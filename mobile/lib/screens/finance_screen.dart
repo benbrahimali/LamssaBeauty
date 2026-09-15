@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/api_exception.dart';
+import '../core/finance_period.dart';
 import '../data/repositories/cash_repository.dart';
 import '../data/repositories/salon_admin_repository.dart';
 import '../theme/app_theme.dart';
@@ -33,8 +34,15 @@ class _FinanceScreenState extends State<FinanceScreen> {
   bool _loading = true;
   String? _error;
 
-  /// Mois consulté : 0 = en cours, -1 = le précédent.
+  /// Mois, semaine, ou période choisie. Le mois reste le défaut : c'est la
+  /// maille où un loyer et des salaires ont un sens.
+  PeriodMode _mode = PeriodMode.month;
+
+  /// Mois ou semaine consultés : 0 = en cours, -1 = le précédent.
   int _offset = 0;
+
+  /// Période choisie au calendrier, en mode « فترة ».
+  DateTimeRange? _custom;
 
   /// Part du pourboire revenant à l'employé, telle que le salon l'a réglée.
   double _tipStaffPct = 100;
@@ -47,13 +55,11 @@ class _FinanceScreenState extends State<FinanceScreen> {
     _load();
   }
 
-  ({DateTime start, DateTime end}) get _period {
-    final now = DateTime.now();
-    final first = DateTime(now.year, now.month + _offset, 1);
-    // Jour 0 du mois suivant = dernier jour du mois visé.
-    final last = DateTime(first.year, first.month + 1, 0);
-    return (start: first, end: last);
-  }
+  DayRange get _period => switch (_mode) {
+        PeriodMode.month => monthRange(DateTime.now(), _offset),
+        PeriodMode.week => weekRange(DateTime.now(), _offset),
+        PeriodMode.custom => (start: _custom!.start, end: _custom!.end),
+      };
 
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
@@ -117,28 +123,32 @@ class _FinanceScreenState extends State<FinanceScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
         children: [
-          _buildMonthPicker(),
+          _buildPeriodPicker(),
           const SizedBox(height: 14),
           _buildResultCard(pnl),
           const SizedBox(height: 14),
           // Avant le détail comptable : à partir de combien le salon gagne
           // sa vie, et où il en est.
           _buildBreakEven(pilot),
-          const SizedBox(height: 12),
-          if (pilot.target != null)
-            _buildTarget(pilot)
-          else
-            // Sans cette invite, la carte objectif ne s'afficherait jamais :
-            // le gérant n'aurait aucun moyen d'en fixer un.
-            GestureDetector(
-              onTap: _editTarget,
-              child: _infoCard(
-                icone: Icons.flag_rounded,
-                couleur: AppColors.gold,
-                titre: 'حدّد هدف شهري',
-                texte: 'باش نقولك كل يوم واش راك في النسق ولا لا.',
+          // L'objectif est mensuel : le comparer à une semaine afficherait
+          // « 20 % » pour une semaine pourtant excellente.
+          if (_mode == PeriodMode.month) ...[
+            const SizedBox(height: 12),
+            if (pilot.target != null)
+              _buildTarget(pilot)
+            else
+              // Sans cette invite, la carte objectif ne s'afficherait jamais :
+              // le gérant n'aurait aucun moyen d'en fixer un.
+              GestureDetector(
+                onTap: _editTarget,
+                child: _infoCard(
+                  icone: Icons.flag_rounded,
+                  couleur: AppColors.gold,
+                  titre: 'حدّد هدف شهري',
+                  texte: 'باش نقولك كل يوم واش راك في النسق ولا لا.',
+                ),
               ),
-            ),
+          ],
           const SizedBox(height: 16),
           _buildBreakdown(pnl),
           if (pnl.byCategory.isNotEmpty) ...[
@@ -170,34 +180,131 @@ class _FinanceScreenState extends State<FinanceScreen> {
     );
   }
 
-  Widget _buildMonthPicker() {
+  /// Mois, semaine ou période libre, puis la navigation dans la période.
+  Widget _buildPeriodPicker() {
     final p = _period;
-    const mois = [
-      'جانفي', 'فيفري', 'مارس', 'أفريل', 'ماي', 'جوان',
-      'جويلية', 'أوت', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر',
+    final navigable = _mode != PeriodMode.custom;
+    const modes = [
+      (PeriodMode.month, 'شهر'),
+      (PeriodMode.week, 'أسبوع'),
+      (PeriodMode.custom, 'فترة'),
     ];
-    return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-      IconButton(
-        onPressed: () {
-          setState(() => _offset -= 1);
-          _load();
-        },
-        icon: const Icon(Icons.chevron_left, color: AppColors.sub),
-      ),
-      Text('${mois[p.start.month - 1]} ${p.start.year}',
-          style: AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
-      IconButton(
-        // Pas de mois futur : il n'y a rien à y lire.
-        onPressed: _offset >= 0
-            ? null
-            : () {
-                setState(() => _offset += 1);
-                _load();
-              },
-        icon: Icon(Icons.chevron_right,
-            color: _offset >= 0 ? AppColors.border : AppColors.sub),
-      ),
+
+    return Column(children: [
+      Row(children: [
+        for (final (mode, label) in modes)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: Semantics(
+                button: true,
+                selected: mode == _mode,
+                child: GestureDetector(
+                  onTap: () => _changeMode(mode),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: mode == _mode ? AppColors.gold : AppColors.card2,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(label,
+                        style: AppTextStyle.dmSans(
+                          size: 12,
+                          color: mode == _mode ? Colors.black : AppColors.sub,
+                          weight: mode == _mode ? FontWeight.w700 : FontWeight.w400,
+                        )),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ]),
+      const SizedBox(height: 6),
+      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        if (navigable)
+          IconButton(
+            tooltip: 'اللي قبل',
+            onPressed: () => _shift(-1),
+            icon: const Icon(Icons.chevron_left, color: AppColors.sub),
+          ),
+        Flexible(
+          child: GestureDetector(
+            onTap: navigable ? null : _pickCustom,
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Flexible(
+                child: Text(rangeLabel(_mode, p),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
+              ),
+              if (!navigable) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.edit_calendar_rounded, size: 16, color: AppColors.gold),
+              ],
+            ]),
+          ),
+        ),
+        if (navigable)
+          IconButton(
+            tooltip: 'اللي بعد',
+            // Pas de période future : il n'y a rien à y lire.
+            onPressed: _offset >= 0 ? null : () => _shift(1),
+            icon: Icon(Icons.chevron_right,
+                color: _offset >= 0 ? AppColors.border : AppColors.sub),
+          ),
+      ]),
     ]);
+  }
+
+  void _shift(int delta) {
+    setState(() => _offset += delta);
+    _load();
+  }
+
+  Future<void> _changeMode(PeriodMode mode) async {
+    if (mode == PeriodMode.custom) {
+      await _pickCustom();
+      return;
+    }
+    if (mode == _mode) return;
+    setState(() {
+      _mode = mode;
+      _offset = 0;
+    });
+    await _load();
+  }
+
+  /// Période libre : du … au …, jusqu'à aujourd'hui.
+  Future<void> _pickCustom() async {
+    final now = DateTime.now();
+    final choisi = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 3),
+      lastDate: now,
+      initialDateRange: _custom ??
+          DateTimeRange(start: now.subtract(const Duration(days: 29)), end: now),
+      helpText: 'اختار الفترة',
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: AppColors.gold,
+            onPrimary: Colors.black,
+            surface: AppColors.card,
+            onSurface: AppColors.text,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (choisi == null || !mounted) return;
+    setState(() {
+      _custom = choisi;
+      _mode = PeriodMode.custom;
+      _offset = 0;
+    });
+    await _load();
   }
 
   Widget _buildResultCard(Pnl pnl) {
@@ -566,7 +673,8 @@ class _FinanceScreenState extends State<FinanceScreen> {
         if (pnl.tipsCollected > 0 || _tipStaffPct < 100) ...[
           const SizedBox(height: 6),
           Text(
-            'هالشهر : ${pnl.tipsCollected.toStringAsFixed(0)} DT للفريق',
+            '${_mode == PeriodMode.month ? 'هالشهر' : 'هالفترة'} : '
+            '${pnl.tipsCollected.toStringAsFixed(0)} DT للفريق',
             style: AppTextStyle.dmSans(size: 11, color: AppColors.sub),
           ),
         ],
