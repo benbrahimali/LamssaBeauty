@@ -30,6 +30,24 @@ class ExpenseCreate(BaseModel):
     spent_at: datetime | None = None
 
 
+class ExpenseUpdate(BaseModel):
+    """Correction d'une dépense : seuls les champs fournis changent.
+
+    La date n'est pas modifiable : déplacer une dépense d'un jour à l'autre
+    changerait deux tiroirs à la fois, dont un peut-être déjà compté.
+    """
+    label: str | None = Field(default=None, min_length=2, max_length=120)
+    amount: float | None = Field(default=None, gt=0)
+    category: str | None = None
+    paid_from: PaymentSource | None = None
+
+    @model_validator(mode="after")
+    def _au_moins_un_champ(self):
+        if not self.model_dump(exclude_none=True):
+            raise ValueError("Rien à modifier")
+        return self
+
+
 class ClosureCreate(BaseModel):
     salon_id: PydanticObjectId
     day: date | None = None          # défaut : aujourd'hui (heure locale salon)

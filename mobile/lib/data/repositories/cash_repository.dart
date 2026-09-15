@@ -1,5 +1,8 @@
+import 'dart:io';
+
 import '../../core/api_client.dart';
 import '../models.dart';
+import 'portfolio_repository.dart';
 
 /// Caisse, tséb9a et clôture (§3.4).
 class CashRepository {
@@ -185,6 +188,40 @@ class CashRepository {
 
   Future<void> removeExpense(String expenseId) =>
       _api.delete('/cash/expenses/$expenseId');
+
+  /// Corrige une dépense : seuls les champs fournis changent. Refusé par le
+  /// serveur sur une journée clôturée.
+  Future<Expense> updateExpense(
+    String expenseId, {
+    String? label,
+    double? amount,
+    String? category,
+    String? paidFrom,
+  }) async {
+    final data = await _api.patch('/cash/expenses/$expenseId', body: {
+      if (label != null) 'label': label,
+      if (amount != null) 'amount': amount,
+      if (category != null) 'category': category,
+      if (paidFrom != null) 'paid_from': paidFrom,
+    }) as Map<String, dynamic>;
+    return Expense.fromJson(data);
+  }
+
+  /// Joint la photo du ticket, en remplaçant la précédente.
+  Future<Expense> uploadReceipt(String expenseId, File image) async {
+    final data = await _api.postMultipart(
+      '/cash/expenses/$expenseId/receipt',
+      field: 'file',
+      bytes: await image.readAsBytes(),
+      filename: image.path.split(RegExp(r'[/\\]')).last,
+      contentType: PortfolioRepository.contentTypeOf(image.path),
+      timeout: const Duration(seconds: 60),
+    ) as Map<String, dynamic>;
+    return Expense.fromJson(data);
+  }
+
+  Future<void> removeReceipt(String expenseId) =>
+      _api.delete('/cash/expenses/$expenseId/receipt');
 
   /// Clôture la journée : verrouille les transactions et génère le rapport.
   ///
@@ -490,6 +527,8 @@ class Expense {
     required this.amount,
     this.category = 'autre',
     this.spentAt,
+    this.paidFrom = 'cash',
+    this.receiptUrl,
   });
 
   final String id;
@@ -498,13 +537,27 @@ class Expense {
   final String category;
   final DateTime? spentAt;
 
-  factory Expense.fromJson(Map<String, dynamic> json) => Expense(
-        id: (json['id'] ?? json['_id'])?.toString() ?? '',
-        label: json['label']?.toString() ?? '',
-        amount: (json['amount'] as num?)?.toDouble() ?? 0,
-        category: json['category']?.toString() ?? 'autre',
-        spentAt: DateTime.tryParse(json['spent_at']?.toString() ?? '')?.toLocal(),
-      );
+  /// `cash` (sorti du tiroir) ou `bank` (par virement).
+  final String paidFrom;
+
+  /// Photo du ticket, null s'il n'y en a pas.
+  final String? receiptUrl;
+
+  bool get fromDrawer => paidFrom != 'bank';
+  bool get hasReceipt => (receiptUrl ?? '').trim().isNotEmpty;
+
+  factory Expense.fromJson(Map<String, dynamic> json) {
+    final ticket = json['receipt_url']?.toString().trim() ?? '';
+    return Expense(
+      id: (json['id'] ?? json['_id'])?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      category: json['category']?.toString() ?? 'autre',
+      spentAt: DateTime.tryParse(json['spent_at']?.toString() ?? '')?.toLocal(),
+      paidFrom: json['paid_from']?.toString() ?? 'cash',
+      receiptUrl: ticket.isEmpty ? null : ticket,
+    );
+  }
 }
 
 

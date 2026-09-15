@@ -3,7 +3,7 @@ import os
 from datetime import date, datetime
 
 from beanie import PydanticObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.core.deps import my_staff_profile
@@ -24,6 +24,7 @@ from app.schemas.cash import (
     CashMovementCreate,
     ClosureCreate,
     ExpenseCreate,
+    ExpenseUpdate,
     RecurringChargeCreate,
     RecurringChargeUpdate,
     StaffPayoutCreate,
@@ -42,7 +43,9 @@ from app.services.cash_service import (
     payout_refusal,
     treasury,
 )
+from app.services import cloudinary_service
 from app.services.notification_service import notify
+from app.services.storage_service import save_image
 from app.services.report_service import generate_closure_report
 
 router = APIRouter()
@@ -405,16 +408,93 @@ async def list_expenses(
     return await Expense.find(query).sort("-spent_at").limit(200).to_list()
 
 
-@router.delete("/expenses/{expense_id}", summary="Supprimer une dépense")
-async def delete_expense(
-    expense_id: PydanticObjectId, user: User = Depends(require_role(Role.OWNER))
-):
+def expense_edit_refusal(*, day_closed: bool) -> str | None:
+    """Pourquoi une dépense ne peut plus être modifiée ni supprimée."""
+    if day_closed:
+        # Le rapport de clôture l'a déjà comptée : la changer après coup
+        # rendrait faux un document déjà remis.
+        return "Journée clôturée : cette dépense est figée dans le rapport."
+    return None
+
+
+async def _owned_expense(expense_id: PydanticObjectId, user: User) -> Expense:
     expense = await Expense.get(expense_id)
     if not expense:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Dépense introuvable")
     await _my_salon(expense.salon_id, user)
+    return expense
+
+
+async def _assert_expense_editable(expense: Expense) -> None:
+    cloture = await CashClosure.find_one(
+        CashClosure.salon_id == expense.salon_id,
+        CashClosure.day == to_local(expense.spent_at).date(),
+    )
+    refus = expense_edit_refusal(day_closed=cloture is not None)
+    if refus:
+        raise HTTPException(status.HTTP_409_CONFLICT, refus)
+
+
+@router.patch("/expenses/{expense_id}", summary="Corriger une dépense")
+async def update_expense(
+    expense_id: PydanticObjectId,
+    body: ExpenseUpdate,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    """Une faute de frappe se corrige au lieu de supprimer puis ressaisir —
+    ce qui faisait perdre la date d'origine de la dépense."""
+    expense = await _owned_expense(expense_id, user)
+    await _assert_expense_editable(expense)
+    for champ, valeur in body.model_dump(exclude_none=True).items():
+        setattr(expense, champ, valeur.strip() if isinstance(valeur, str) else valeur)
+    await expense.save()
+    return expense
+
+
+@router.delete("/expenses/{expense_id}", summary="Supprimer une dépense")
+async def delete_expense(
+    expense_id: PydanticObjectId, user: User = Depends(require_role(Role.OWNER))
+):
+    expense = await _owned_expense(expense_id, user)
+    # Même règle que la modification : sans elle, supprimer une dépense d'une
+    # journée clôturée rendait le rapport faux sans que rien ne l'empêche.
+    await _assert_expense_editable(expense)
     await expense.delete()
+    await cloudinary_service.destroy(
+        cloudinary_service.public_id_from_url(expense.receipt_url) or ""
+    )
     return {"removed": str(expense_id)}
+
+
+@router.post("/expenses/{expense_id}/receipt", summary="Joindre la photo du ticket")
+async def upload_receipt(
+    expense_id: PydanticObjectId,
+    file: UploadFile,
+    user: User = Depends(require_role(Role.OWNER)),
+):
+    """Possible même sur une journée clôturée : une photo ne change aucun
+    montant, et le ticket retrouvé le lendemain doit pouvoir être joint."""
+    expense = await _owned_expense(expense_id, user)
+    ancienne = expense.receipt_url
+    expense.receipt_url = await save_image(file, f"receipts/{expense.salon_id}")
+    await expense.save()
+    await cloudinary_service.destroy(cloudinary_service.public_id_from_url(ancienne) or "")
+    return expense
+
+
+@router.delete("/expenses/{expense_id}/receipt", summary="Retirer la photo du ticket")
+async def remove_receipt(
+    expense_id: PydanticObjectId, user: User = Depends(require_role(Role.OWNER))
+):
+    expense = await _owned_expense(expense_id, user)
+    ancienne = expense.receipt_url
+    if ancienne:
+        expense.receipt_url = None
+        await expense.save()
+        await cloudinary_service.destroy(
+            cloudinary_service.public_id_from_url(ancienne) or ""
+        )
+    return expense
 
 
 # ─────────────────────────────────────────────────────────────────────────────

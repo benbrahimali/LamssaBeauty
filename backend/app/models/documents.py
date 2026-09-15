@@ -460,6 +460,9 @@ class Expense(Document):
     paid_from: PaymentSource = PaymentSource.CASH
     spent_at: datetime = Field(default_factory=utcnow)
     created_by: PydanticObjectId | None = None
+    # Photo du ticket : la preuve que le comptable demandera, et le seul moyen
+    # de retrouver ce qu'une dépense de 45 DT « produits » contenait vraiment.
+    receipt_url: str | None = None
 
     class Settings:
         name = "expenses"

@@ -7,6 +7,7 @@ import '../data/repositories/cash_repository.dart';
 import '../state/cash_controller.dart';
 import '../theme/app_theme.dart';
 import 'async_states.dart';
+import 'expense_edit_sheet.dart';
 
 /// Dépenses du salon (§3.4).
 ///
@@ -113,6 +114,18 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
       setState(() => _expenses = before);
       showAppSnack(context, e.message);
     }
+  }
+
+  /// Ouvre la dépense pour la corriger ou y joindre le ticket.
+  ///
+  /// La liste et la caisse se rechargent toujours à la fermeture : une photo
+  /// jointe puis la feuille glissée vers le bas doit apparaître quand même.
+  Future<void> _edit(Expense expense) async {
+    await ExpenseEditSheet.show(context, expense);
+    if (!mounted) return;
+    await _load();
+    if (!mounted) return;
+    await context.read<CashController>().load();
   }
 
   double get _total => _expenses.fold(0.0, (sum, e) => sum + e.amount);
@@ -268,7 +281,10 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (_, i) {
         final expense = _expenses[i];
-        return Container(
+        return GestureDetector(
+          onTap: () => _edit(expense),
+          behavior: HitTestBehavior.opaque,
+          child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: AppColors.card2,
@@ -283,13 +299,19 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppTextStyle.dmSans(weight: FontWeight.w600)),
-                    if (expense.spentAt != null)
-                      Text(
-                        '${expense.spentAt!.day.toString().padLeft(2, '0')}/'
-                        '${expense.spentAt!.month.toString().padLeft(2, '0')}',
-                        style:
-                            AppTextStyle.dmSans(size: 11, color: AppColors.sub),
-                      ),
+                    Text(
+                      [
+                        if (expense.spentAt != null)
+                          '${expense.spentAt!.day.toString().padLeft(2, '0')}/'
+                              '${expense.spentAt!.month.toString().padLeft(2, '0')}',
+                        expense.fromDrawer ? 'كاش' : 'تحويل',
+                        if (expense.hasReceipt) '🧾',
+                      ].join(' · '),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          AppTextStyle.dmSans(size: 11, color: AppColors.sub),
+                    ),
                   ]),
             ),
             Text('-${expense.amount.toStringAsFixed(0)} DT',
@@ -305,6 +327,7 @@ class _ExpensesSheetState extends State<ExpensesSheet> {
               ),
             ),
           ]),
+          ),
         );
       },
     );
