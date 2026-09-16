@@ -183,7 +183,25 @@ class _AppShellState extends State<_AppShell> {
   AuthController get _auth => context.read<AuthController>();
 
   void _goSalon(Salon s) => setState(() { _currentSalon = s; _currentCoiffeur = null; });
-  void _goCoiffeur(Coiffeur c) => setState(() { _currentCoiffeur = c; });
+  /// Coiffeur touché dans « حجامين ترند » ou dans l'équipe d'un salon.
+  ///
+  /// Depuis la page du salon, celui-ci est déjà chargé. Depuis l'accueil, non :
+  /// sans son salon, le bouton « احجز مع… » restait caché.
+  Future<void> _goCoiffeur(Coiffeur c) async {
+    if (c.salonId.isEmpty || _currentSalon?.id == c.salonId) {
+      setState(() => _currentCoiffeur = c);
+      return;
+    }
+    final salon = await resolveSalonOf(context.read<SalonRepository>(), c);
+    if (!mounted) return;
+    setState(() {
+      _currentSalon = salon;
+      _currentCoiffeur = c;
+    });
+    if (salon == null) {
+      showAppSnack(context, 'الحجز مع هالحجّام موش متاح توّا');
+    }
+  }
   void _goBack() => setState(() {
     if (_inBooking) { _inBooking = false; }
     else if (_currentCoiffeur != null) { _currentCoiffeur = null; }

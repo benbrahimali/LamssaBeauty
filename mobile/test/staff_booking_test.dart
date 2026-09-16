@@ -67,6 +67,33 @@ void main() {
     expect(depot.salonsDemandes, isEmpty);
   });
 
+  group('Coiffeur de « حجامين ترند »', () {
+    const ahmed = Coiffeur(id: 'st1', name: 'Ahmed', salonId: 's1');
+
+    test('son salon est retrouvé pour pouvoir le réserver', () async {
+      final depot = _FauxDepot();
+
+      final salon = await resolveSalonOf(depot, ahmed);
+
+      expect(salon?.id, 's1');
+      expect(depot.salonsDemandes, ['s1']);
+    });
+
+    test('un salon indisponible ne bloque pas le profil', () async {
+      expect(await resolveSalonOf(_FauxDepot(salonDisponible: false), ahmed), isNull);
+    });
+
+    test('sans salon connu, aucune requête', () async {
+      final depot = _FauxDepot();
+
+      final salon = await resolveSalonOf(
+          depot, const Coiffeur(id: 'st1', name: 'Ahmed'));
+
+      expect(salon, isNull);
+      expect(depot.salonsDemandes, isEmpty);
+    });
+  });
+
   test('un coiffeur introuvable remonte l’erreur : il n’y a rien à montrer', () async {
     expect(
       () => resolveStaffForBooking(_FauxDepot(coiffeurExiste: false), 'st1'),

@@ -5,7 +5,11 @@ import '../data/models.dart';
 import '../data/repositories/booking_repository.dart';
 import '../data/repositories/salon_repository.dart';
 
-/// Tunnel de réservation : service → jour → créneau → confirmation.
+/// Tunnel de réservation : services → jour → créneau → confirmation.
+///
+/// Le client choisit une ou plusieurs prestations (coupe + barbe, brushing +
+/// soin) : la durée s'additionne, et le serveur ne propose que les créneaux où
+/// l'ensemble tient.
 class BookingController extends ChangeNotifier {
   BookingController(this._salons, this._bookings);
 
@@ -16,7 +20,8 @@ class BookingController extends ChangeNotifier {
 
   String? _salonId;
   String? _staffId;
-  ServiceItem? _service;
+  /// Prestations choisies, dans l'ordre où le client les a ajoutées.
+  final List<ServiceItem> _selected = [];
   int _dayIndex = 0;
   BookingSlot? _slot;
 
@@ -32,7 +37,16 @@ class BookingController extends ChangeNotifier {
   String? _error;
   List<String> _alternatives = const [];
 
-  ServiceItem? get service => _service;
+  List<ServiceItem> get selectedServices => List.unmodifiable(_selected);
+  bool get hasServices => _selected.isNotEmpty;
+  bool isSelected(ServiceItem service) => _selected.any((s) => s.id == service.id);
+
+  /// Prix affiché avant confirmation. Le serveur refait le calcul : c'est son
+  /// prix qui est figé sur le RDV.
+  double get totalPrice => _selected.fold(0.0, (total, s) => total + s.price);
+  int get totalDuration => _selected.fold(0, (total, s) => total + s.duration);
+
+  List<String> get _serviceIds => [for (final s in _selected) s.id];
 
   bool get loadingDays => _loadingDays;
 
@@ -52,13 +66,13 @@ class BookingController extends ChangeNotifier {
   bool get submitting => _submitting;
   String? get error => _error;
   List<String> get alternatives => _alternatives;
-  bool get canBook => _service != null && _slot != null && !_submitting;
+  bool get canBook => _selected.isNotEmpty && _slot != null && !_submitting;
 
   /// Prépare un nouveau tunnel. `staffId` null = « peu importe le coiffeur ».
   void start({required String salonId, String? staffId}) {
     _salonId = salonId;
     _staffId = staffId;
-    _service = null;
+    _selected.clear();
     _slot = null;
     _dayIndex = 0;
     _slots = const [];
@@ -66,8 +80,27 @@ class BookingController extends ChangeNotifier {
     _alternatives = const [];
   }
 
+  /// Ajoute la prestation, ou la retire si elle était déjà choisie.
+  ///
+  /// La durée change avec la sélection : le créneau choisi n'est plus sûr de
+  /// tenir, les jours et les créneaux se recalculent.
+  Future<void> toggleService(ServiceItem service) async {
+    final index = _selected.indexWhere((s) => s.id == service.id);
+    if (index >= 0) {
+      _selected.removeAt(index);
+    } else {
+      _selected.add(service);
+    }
+    _slot = null;
+    await _loadAvailability();
+    await _loadSlots();
+  }
+
+  /// Remplace la sélection par cette seule prestation.
   Future<void> selectService(ServiceItem service) async {
-    _service = service;
+    _selected
+      ..clear()
+      ..add(service);
     _slot = null;
     await _loadAvailability();
     await _loadSlots();
@@ -100,7 +133,7 @@ class BookingController extends ChangeNotifier {
   /// choisi quoi que ce soit.
   Future<void> _loadAvailability() async {
     final staffId = _staffId;
-    if (staffId == null || _service == null) {
+    if (staffId == null || _selected.isEmpty) {
       _availability = const {};
       notifyListeners();
       return;
@@ -111,7 +144,7 @@ class BookingController extends ChangeNotifier {
     try {
       final jours = await _salons.availability(
         staffId: staffId,
-        serviceIds: [_service!.id],
+        serviceIds: _serviceIds,
         days: days.length,
       );
       _availability = {for (final j in jours) j.isoDate: j};
@@ -136,7 +169,7 @@ class BookingController extends ChangeNotifier {
     final staffId = _staffId;
     // Sans coiffeur nommé, le backend choisira au moment de la réservation :
     // on ne peut pas afficher de grille fiable, l'utilisateur en choisit un.
-    if (staffId == null || _service == null) {
+    if (staffId == null || _selected.isEmpty) {
       _slots = const [];
       notifyListeners();
       return;
@@ -149,7 +182,7 @@ class BookingController extends ChangeNotifier {
       _slots = await _salons.slots(
         staffId: staffId,
         isoDate: selectedDay.isoDate,
-        serviceIds: [_service!.id],
+        serviceIds: _serviceIds,
       );
     } on ApiException catch (e) {
       _error = e.message;
@@ -163,7 +196,7 @@ class BookingController extends ChangeNotifier {
   /// Crée le RDV. Renvoie null en cas d'échec (voir [error]).
   Future<Booking?> confirm({bool payOnline = false}) async {
     final salonId = _salonId;
-    if (salonId == null || _service == null || _slot == null) return null;
+    if (salonId == null || _selected.isEmpty || _slot == null) return null;
 
     _submitting = true;
     _error = null;
@@ -173,7 +206,7 @@ class BookingController extends ChangeNotifier {
       final booking = await _bookings.create(
         salonId: salonId,
         staffId: _staffId,
-        serviceIds: [_service!.id],
+        serviceIds: _serviceIds,
         startIso: _slot!.start,
       );
 

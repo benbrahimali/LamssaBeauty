@@ -225,7 +225,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
         itemBuilder: (context, i) => _BookingCard(
           booking: items[i],
           onCancel: items[i].isActive ? () => _cancel(items[i]) : null,
+          // Le serveur dit si l'avis existe déjà ; `_reviewed` couvre celui
+          // qu'on vient de laisser, avant le prochain rechargement.
           onReview: items[i].status == BookingStatus.done &&
+                  !items[i].reviewed &&
                   !_reviewed.contains(items[i].id)
               ? () => _review(items[i])
               : null,

@@ -110,7 +110,7 @@ class _BookingScreenState extends State<BookingScreen> {
                                 _buildSalonInfo(),
                                 if (_team.isNotEmpty) _buildStaffSection(controller),
                                 _buildServiceSection(controller),
-                                if (controller.service != null) ...[
+                                if (controller.hasServices) ...[
                                   _buildDaySection(controller),
                                   _buildSlotsSection(controller),
                                   _buildPaymentSection(),
@@ -260,14 +260,14 @@ class _BookingScreenState extends State<BookingScreen> {
       );
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _sectionTitle('اختار الخدمة ✂️'),
+      _sectionTitle('اختار خدمة وحدة ولا أكثر ✂️'),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(
           children: _services.map((service) {
-            final selected = controller.service?.id == service.id;
+            final selected = controller.isSelected(service);
             return GestureDetector(
-              onTap: () => controller.selectService(service),
+              onTap: () => controller.toggleService(service),
               child: Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(14),
@@ -296,6 +296,16 @@ class _BookingScreenState extends State<BookingScreen> {
                   ),
                   Text('${service.price.toStringAsFixed(0)} DT',
                       style: AppTextStyle.playfair(size: 16, color: AppColors.gold)),
+                  const SizedBox(width: 10),
+                  // La case dit qu'on peut en cocher plusieurs : une simple
+                  // bordure dorée laissait croire à un choix unique.
+                  Icon(
+                    selected
+                        ? Icons.check_circle_rounded
+                        : Icons.radio_button_unchecked_rounded,
+                    size: 22,
+                    color: selected ? AppColors.gold : AppColors.sub,
+                  ),
                 ]),
               ),
             );
@@ -515,7 +525,8 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildSummary(BookingController controller) {
-    final service = controller.service!;
+    final services = controller.selectedServices;
+    String nom(ServiceItem s) => s.nameAr.trim().isNotEmpty ? s.nameAr : s.name;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 22, 20, 0),
       child: Container(
@@ -526,15 +537,16 @@ class _BookingScreenState extends State<BookingScreen> {
           border: Border.all(color: AppColors.border),
         ),
         child: Column(children: [
-          _summaryRow('الخدمة',
-              service.nameAr.trim().isNotEmpty ? service.nameAr : service.name),
+          _summaryRow(services.length > 1 ? 'الخدمات' : 'الخدمة',
+              services.map(nom).join(' + ')),
+          _summaryRow('المدّة', '${controller.totalDuration} دقيقة'),
           _summaryRow('التاريخ', controller.selectedDay.fullDate),
           _summaryRow('الوقت', controller.slot?.time ?? '—'),
           const Divider(color: AppColors.border, height: 22),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text('المجموع',
                 style: AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
-            Text('${service.price.toStringAsFixed(0)} DT',
+            Text('${controller.totalPrice.toStringAsFixed(0)} DT',
                 style: AppTextStyle.playfair(size: 20, color: AppColors.gold)),
           ]),
         ]),

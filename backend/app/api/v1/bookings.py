@@ -3,6 +3,7 @@ from datetime import date
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.encoders import jsonable_encoder
 from pymongo.errors import DuplicateKeyError
 
 from app.core.deps import assert_salon_access, get_salon
@@ -11,6 +12,7 @@ from app.core.timeutils import local_day_bounds, to_local, utcnow
 from app.models.documents import (
     Booking,
     CashClosure,
+    Review,
     Salon,
     Service,
     StaffMember,
@@ -44,6 +46,15 @@ from app.services.notification_service import notify, notify_many
 from app.services.split_engine import SplitEngine
 
 router = APIRouter()
+
+
+def mark_reviewed(bookings: list[dict], reviewed_ids: set[str]) -> list[dict]:
+    """Ajoute à chaque RDV s'il a déjà reçu l'avis du client.
+
+    Sans ce drapeau, l'app ne le retenait qu'en mémoire : après un redémarrage
+    le bouton « قيّم » revenait, et le serveur refusait le second avis.
+    """
+    return [{**b, "reviewed": str(b.get("id") or b.get("_id")) in reviewed_ids} for b in bookings]
 
 
 def void_refusal(*, day_closed: bool, method: PaymentMethod) -> str | None:
@@ -161,7 +172,11 @@ async def my_bookings(
         query["status"] = {
             "$in": [BookingStatus.DONE, BookingStatus.CANCELLED, BookingStatus.NO_SHOW]
         }
-    return await Booking.find(query).sort("-start").to_list()
+    rdvs = await Booking.find(query).sort("-start").to_list()
+    avis = await Review.find(
+        {"booking_id": {"$in": [b.id for b in rdvs if b.status is BookingStatus.DONE]}}
+    ).to_list()
+    return mark_reviewed(jsonable_encoder(rdvs), {str(a.booking_id) for a in avis})
 
 
 @router.get("/salon/{salon_id}", summary="Agenda du jour d'un salon (gérant/staff)")
