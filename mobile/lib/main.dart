@@ -9,6 +9,7 @@ import 'app_providers.dart';
 import 'core/api_exception.dart';
 import 'core/notification_route.dart';
 import 'core/push_service.dart';
+import 'core/staff_booking.dart';
 import 'data/repositories/salon_repository.dart';
 import 'data/models.dart';
 import 'screens/auth_screen.dart';
@@ -465,9 +466,18 @@ class _AppShellState extends State<_AppShell> {
   /// savoir de quel salon il s'agit.
   Future<void> _goStaffById(String staffId) async {
     try {
-      final profile = await context.read<SalonRepository>().staffProfile(staffId);
+      final cible = await resolveStaffForBooking(
+          context.read<SalonRepository>(), staffId);
       if (!mounted) return;
-      setState(() => _currentCoiffeur = profile.coiffeur);
+      setState(() {
+        // Le salon avec le coiffeur : c'est lui qui fait apparaître « احجز مع… »,
+        // et le retour depuis le profil y ramène.
+        _currentSalon = cible.salon;
+        _currentCoiffeur = cible.coiffeur;
+      });
+      if (cible.salon == null) {
+        showAppSnack(context, 'الحجز مع هالحجّام موش متاح توّا');
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
       showAppSnack(context, e.message);
