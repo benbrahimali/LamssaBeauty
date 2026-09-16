@@ -17,6 +17,7 @@ import '../widgets/treasury_sheet.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/walk_in_sheet.dart';
 import '../widgets/prompt_dialog.dart';
+import '../core/money.dart';
 
 /// Caisse du salon (§3.4) : encaissement, split par employé, clôture de journée.
 class CaisseScreen extends StatefulWidget {
@@ -101,9 +102,9 @@ class _CaisseScreenState extends State<CaisseScreen> {
       context,
       ecart.abs() >= 0.01
           ? 'اليوم مسكّر — فرق ${ecart.toStringAsFixed(2)} DT · '
-              'فلوس غدوة ${closure.closingFloat.toStringAsFixed(0)} DT'
-          : 'اليوم مسكّر — ${closure.total.toStringAsFixed(0)} DT · '
-              'صافي ${closure.netSalon.toStringAsFixed(0)} DT',
+              'فلوس غدوة ${formatDt(closure.closingFloat)}'
+          : 'اليوم مسكّر — ${formatDt(closure.total)} · '
+              'صافي ${formatDt(closure.netSalon)}',
       success: ecart.abs() < 0.01,
     );
   }
@@ -204,7 +205,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
                 letterSpacing: 1,
               )),
           const SizedBox(height: 10),
-          Text('${day.total.toStringAsFixed(0)} DT',
+          Text(formatDt(day.total),
               style: GoogleFonts.playfairDisplay(
                 fontSize: 44,
                 fontWeight: FontWeight.w700,
@@ -219,31 +220,31 @@ class _CaisseScreenState extends State<CaisseScreen> {
           Row(children: [
             Expanded(
                 child: _statBox('🏪 الصالون',
-                    '${day.salonTotal.toStringAsFixed(0)} DT', AppColors.teal)),
+                    formatDt(day.salonTotal), AppColors.teal)),
             const SizedBox(width: 12),
             Expanded(
                 child: _statBox('👥 الفريق',
-                    '${day.staffTotal.toStringAsFixed(0)} DT', AppColors.pink)),
+                    formatDt(day.staffTotal), AppColors.pink)),
             const SizedBox(width: 12),
             Expanded(
                 child: _statBox(
                     '💅 البواقي',
-                    '+${day.tipsTotal.toStringAsFixed(0)} DT',
+                    '+${formatDt(day.tipsTotal)}',
                     AppColors.green)),
           ]),
           const SizedBox(height: 12),
           Row(children: [
             Expanded(
-                child: _statBox('💵 كاش', '${day.cash.toStringAsFixed(0)} DT',
+                child: _statBox('💵 كاش', formatDt(day.cash),
                     AppColors.gold)),
             const SizedBox(width: 12),
             Expanded(
-                child: _statBox('💳 TPE', '${day.card.toStringAsFixed(0)} DT',
+                child: _statBox('💳 TPE', formatDt(day.card),
                     AppColors.gold)),
             const SizedBox(width: 12),
             Expanded(
                 child: _statBox('🌐 أونلاين',
-                    '${day.online.toStringAsFixed(0)} DT', AppColors.gold)),
+                    formatDt(day.online), AppColors.gold)),
           ]),
         ]),
       ),
@@ -296,11 +297,16 @@ class _CaisseScreenState extends State<CaisseScreen> {
       staffId: payload.staffId,
       serviceId: payload.serviceId,
       clientName: payload.clientName,
+      payNow: payload.payNow,
+      method: payload.method,
     );
     if (!mounted) return;
     showAppSnack(
       context,
-      error ?? 'زبون طيّاح تزاد للأجندة ✅',
+      error ??
+          (payload.payNow
+              ? 'زبون طيّاح تزاد وتخلّص ✅'
+              : 'زبون طيّاح تزاد للأجندة — ما تنساش « خلّص » ✅'),
       success: error == null,
     );
   }
@@ -337,7 +343,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
     final saisie = await PromptDialog.show(
       context,
       title: 'صلّح الخلاص ؟',
-      message: '${booking.price.toStringAsFixed(0)} DT لـ ${booking.clientName}.\n'
+      message: '${formatDt(booking.price)} لـ ${booking.clientName}.\n'
           'الخلاص يتنحّى والموعد يرجع « قاعد يصير » باش تخلّصو من جديد '
           'بالمبلغ الصحيح. الحجام يوصلو إشعار.',
       fields: const [
@@ -381,7 +387,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
         backgroundColor: AppColors.card,
         title: Text('ترجّع الفلوس ؟', style: AppTextStyle.playfair(size: 18)),
         content: Text(
-          '${booking.price.toStringAsFixed(0)} DT لـ ${booking.clientName}.\n'
+          '${formatDt(booking.price)} لـ ${booking.clientName}.\n'
           'الترجيع الفعلي يصير عند مزوّد الخلاص.',
           style: AppTextStyle.dmSans(size: 13, color: AppColors.sub)
               .copyWith(height: 1.5),
@@ -714,7 +720,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
                     ),
                   )
                 else
-                  Text('${booking.price.toStringAsFixed(0)} DT',
+                  Text(formatDt(booking.price),
                       style: GoogleFonts.dmSans(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -807,7 +813,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
                       Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text('${worker.total.toStringAsFixed(0)} DT',
+                            Text(formatDt(worker.total),
                                 style: GoogleFonts.playfairDisplay(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
@@ -906,7 +912,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
                                 )),
                             if (closure.advancesDeducted > 0)
                               Text(
-                                  'سلف -${closure.advancesDeducted.toStringAsFixed(0)} DT',
+                                  'سلف -${formatDt(closure.advancesDeducted)}',
                                   style: GoogleFonts.dmSans(
                                       fontSize: 11, color: AppColors.sub)),
                           ]),
@@ -914,13 +920,13 @@ class _CaisseScreenState extends State<CaisseScreen> {
                     Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('${closure.total.toStringAsFixed(0)} DT',
+                          Text(formatDt(closure.total),
                               style: GoogleFonts.playfairDisplay(
                                 fontSize: 17,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.gold,
                               )),
-                          Text('صافي ${closure.netSalon.toStringAsFixed(0)} DT',
+                          Text('صافي ${formatDt(closure.netSalon)}',
                               style: GoogleFonts.dmSans(
                                   fontSize: 11, color: AppColors.sub)),
                         ]),
@@ -981,8 +987,7 @@ class _CompleteSheetState extends State<_CompleteSheet> {
           Text('خلّص الخدمة', style: AppTextStyle.playfair(size: 20)),
           const SizedBox(height: 4),
           Text(
-            '${widget.booking.clientName} · '
-            '${widget.booking.price.toStringAsFixed(0)} DT',
+            '${widget.booking.clientName} · ${formatDt(widget.booking.price)}',
             style: AppTextStyle.dmSans(size: 12, color: AppColors.sub),
           ),
           const SizedBox(height: 20),

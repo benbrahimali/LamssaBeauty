@@ -98,9 +98,40 @@ class CashController extends ChangeNotifier {
     _closures = const [];
   }
 
-  Future<void> load() async {
+
+  /// Chargement en cours, que les appels suivants rejoignent.
+  Future<void>? _loadEnCours;
+  bool _reloadDemande = false;
+
+  /// Recharge les chiffres.
+  ///
+  /// Un appel arrivé pendant un chargement était ignoré : un encaissement fait
+  /// pendant un rafraîchissement laissait les anciens chiffres à l'écran. Il
+  /// déclenche maintenant un second passage, et l'appelant attend que ce
+  /// passage soit terminé — il lit donc bien l'état d'après son action.
+  Future<void> load() {
+    final enCours = _loadEnCours;
+    if (enCours != null) {
+      _reloadDemande = true;
+      return enCours;
+    }
+    return _loadEnCours = _loadBoucle();
+  }
+
+  Future<void> _loadBoucle() async {
+    try {
+      do {
+        _reloadDemande = false;
+        await _loadOnce();
+      } while (_reloadDemande);
+    } finally {
+      _loadEnCours = null;
+    }
+  }
+
+  Future<void> _loadOnce() async {
     final salonId = _salonId;
-    if (salonId == null || _loading) return;
+    if (salonId == null) return;
 
     _loading = true;
     _error = null;
@@ -142,11 +173,13 @@ class CashController extends ChangeNotifier {
     required String serviceId,
     required String clientName,
     DateTime? start,
+    bool payNow = false,
+    String method = 'cash',
   }) async {
     final salonId = _salonId;
     if (salonId == null) return 'Aucun salon sélectionné';
     try {
-      await _bookings.createWalkIn(
+      final rdv = await _bookings.createWalkIn(
         salonId: salonId,
         staffId: staffId,
         serviceIds: [serviceId],
@@ -154,8 +187,10 @@ class CashController extends ChangeNotifier {
         startIso: (start ?? DateTime.now()).toUtc().toIso8601String(),
         clientName: clientName,
       );
+      final erreur =
+          payNow ? await _encaisserWalkIn(_bookings, rdv.id, method) : null;
       await load();
-      return null;
+      return erreur;
     } on ApiException catch (e) {
       return e.message;
     }
@@ -373,17 +408,21 @@ class MyCashController extends ChangeNotifier {
     required String staffId,
     required String serviceId,
     required String clientName,
+    bool payNow = false,
+    String method = 'cash',
   }) async {
     try {
-      await _bookings.createWalkIn(
+      final rdv = await _bookings.createWalkIn(
         salonId: salonId,
         staffId: staffId,
         serviceIds: [serviceId],
         startIso: DateTime.now().toUtc().toIso8601String(),
         clientName: clientName,
       );
+      final erreur =
+          payNow ? await _encaisserWalkIn(_bookings, rdv.id, method) : null;
       await load();
-      return null;
+      return erreur;
     } on ApiException catch (e) {
       return e.message;
     }
@@ -391,8 +430,38 @@ class MyCashController extends ChangeNotifier {
   bool get loading => _loading;
   String? get error => _error;
 
-  Future<void> load() async {
-    if (_loading) return;
+
+  /// Chargement en cours, que les appels suivants rejoignent.
+  Future<void>? _loadEnCours;
+  bool _reloadDemande = false;
+
+  /// Recharge les chiffres.
+  ///
+  /// Un appel arrivé pendant un chargement était ignoré : un encaissement fait
+  /// pendant un rafraîchissement laissait les anciens chiffres à l'écran. Il
+  /// déclenche maintenant un second passage, et l'appelant attend que ce
+  /// passage soit terminé — il lit donc bien l'état d'après son action.
+  Future<void> load() {
+    final enCours = _loadEnCours;
+    if (enCours != null) {
+      _reloadDemande = true;
+      return enCours;
+    }
+    return _loadEnCours = _loadBoucle();
+  }
+
+  Future<void> _loadBoucle() async {
+    try {
+      do {
+        _reloadDemande = false;
+        await _loadOnce();
+      } while (_reloadDemande);
+    } finally {
+      _loadEnCours = null;
+    }
+  }
+
+  Future<void> _loadOnce() async {
     _loading = true;
     _error = null;
     notifyListeners();
@@ -443,5 +512,20 @@ class MyCashController extends ChangeNotifier {
     } on ApiException catch (e) {
       return e.message;
     }
+  }
+}
+
+/// Encaisse un walk-in qu'on vient de créer. Renvoie l'erreur, ou null.
+///
+/// Si l'encaissement échoue, le rendez-vous existe déjà : le dire, pour que la
+/// personne le retrouve dans l'agenda et touche « خلّص », plutôt que de le
+/// recréer en double.
+Future<String?> _encaisserWalkIn(
+    BookingRepository bookings, String bookingId, String method) async {
+  try {
+    await bookings.complete(bookingId: bookingId, method: method);
+    return null;
+  } on ApiException catch (e) {
+    return 'الزبون تزاد، أما الخلاص ما تسجّلش : ${e.message}';
   }
 }

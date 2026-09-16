@@ -12,6 +12,7 @@ import '../widgets/common_widgets.dart';
 import '../widgets/verification_banner.dart';
 import 'create_salon_screen.dart';
 import 'manage_salon_screen.dart';
+import '../core/money.dart';
 
 /// Tableau de bord gérant : caisse du jour, agenda, équipe, tséb9as à valider.
 class OwnerDashboardScreen extends StatefulWidget {
@@ -242,7 +243,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           Expanded(child: KpiCard(
             icon: Icons.monetization_on_rounded,
             iconColor: AppColors.gold,
-            value: '${day.total.toStringAsFixed(0)} DT',
+            value: formatDt(day.total),
             label: 'إيرادات اليوم',
             change: '${day.transactionCount} خدمة',
             gold: true,
@@ -262,10 +263,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           Expanded(child: KpiCard(
             icon: Icons.store_rounded,
             iconColor: AppColors.teal,
-            value: '${day.salonTotal.toStringAsFixed(0)} DT',
+            value: formatDt(day.salonTotal),
             label: 'نصيب الصالون',
             change: day.expensesTotal > 0
-                ? 'صافي ${day.netSalon.toStringAsFixed(0)} DT'
+                ? 'صافي ${formatDt(day.netSalon)}'
                 : null,
             changeColor: AppColors.sub,
           )),
@@ -273,10 +274,10 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
           Expanded(child: KpiCard(
             icon: Icons.people_rounded,
             iconColor: AppColors.pink,
-            value: '${day.staffTotal.toStringAsFixed(0)} DT',
+            value: formatDt(day.staffTotal),
             label: 'نصيب الفريق',
             change: day.tipsTotal > 0
-                ? '+${day.tipsTotal.toStringAsFixed(0)} بقشيش'
+                ? '+${formatDt(day.tipsTotal, suffix: ' بقشيش')}'
                 : null,
           )),
         ]),
@@ -305,7 +306,7 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text(
-                    '${advance.staffName} — ${advance.amount.toStringAsFixed(0)} DT',
+                    '${advance.staffName} — ${formatDt(advance.amount)}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyle.dmSans(size: 13, weight: FontWeight.w600),
@@ -474,9 +475,9 @@ class _OwnerDashboardScreenState extends State<OwnerDashboardScreen> {
               ]),
             ),
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('${worker.total.toStringAsFixed(0)} DT',
+              Text(formatDt(worker.total),
                   style: GoogleFonts.dmSans(fontSize: 13, color: AppColors.gold)),
-              Text('نصيبه ${worker.share.toStringAsFixed(0)} DT',
+              Text('نصيبه ${formatDt(worker.share)}',
                   style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.sub)),
             ]),
           ]),
@@ -536,7 +537,7 @@ class _BookingRow extends StatelessWidget {
           ]),
         ),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text('${booking.price.toStringAsFixed(0)} DT',
+          Text(formatDt(booking.price),
               style: GoogleFonts.playfairDisplay(
                 fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.gold,
               )),

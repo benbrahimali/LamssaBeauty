@@ -104,11 +104,13 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
       staffId: staffId,
       serviceId: payload.serviceId,
       clientName: payload.clientName,
+      payNow: payload.payNow,
+      method: payload.method,
     );
     if (!mounted) return;
     showAppSnack(
       context,
-      error ?? 'زبون طيّاح تزاد ✅',
+      error ?? (payload.payNow ? 'زبون طيّاح تزاد وتخلّص ✅' : 'زبون طيّاح تزاد ✅'),
       success: error == null,
     );
   }

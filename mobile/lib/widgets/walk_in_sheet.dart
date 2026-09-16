@@ -10,10 +10,18 @@ class WalkInPayload {
   final String serviceId;
   final String clientName;
 
+  /// Encaisser tout de suite : le client de passage est déjà servi.
+  final bool payNow;
+
+  /// `cash` ou `card`, quand [payNow].
+  final String method;
+
   const WalkInPayload({
     required this.staffId,
     required this.serviceId,
     required this.clientName,
+    this.payNow = false,
+    this.method = 'cash',
   });
 }
 
@@ -43,6 +51,11 @@ class _WalkInSheetState extends State<WalkInSheet> {
   final _nameCtrl = TextEditingController();
   String? _staffId;
   String? _serviceId;
+
+  /// Activé par défaut : oublier « خلّص » laissait la recette du jour
+  /// inchangée alors que le client avait payé.
+  bool _payNow = true;
+  String _method = 'cash';
 
   @override
   void initState() {
@@ -142,10 +155,12 @@ class _WalkInSheetState extends State<WalkInSheet> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
+            _buildPayNow(),
             const SizedBox(height: 22),
 
             GoldButton(
-              text: 'زيدو',
+              text: _payNow ? 'زيدو و خلّص' : 'زيدو',
               enabled: _valid,
               onPressed: () => Navigator.pop(
                 context,
@@ -155,12 +170,56 @@ class _WalkInSheetState extends State<WalkInSheet> {
                   clientName: _nameCtrl.text.trim().isEmpty
                       ? 'زبون طيّاح'
                       : _nameCtrl.text.trim(),
+                  payNow: _payNow,
+                  method: _method,
                 ),
               ),
             ),
           ]),
         ),
       ),
+    );
+  }
+
+  Widget _buildPayNow() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(children: [
+        Row(children: [
+          Expanded(
+            child: Text('خلّص توّا',
+                style: AppTextStyle.dmSans(size: 14, weight: FontWeight.w700)),
+          ),
+          Switch(
+            value: _payNow,
+            activeTrackColor: AppColors.gold,
+            onChanged: (v) => setState(() => _payNow = v),
+          ),
+        ]),
+        if (_payNow)
+          Row(children: [
+            Expanded(
+              child: _chip(
+                label: '💵 كاش',
+                selected: _method == 'cash',
+                onTap: () => setState(() => _method = 'cash'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _chip(
+                label: '💳 كارط',
+                selected: _method == 'card',
+                onTap: () => setState(() => _method = 'card'),
+              ),
+            ),
+          ]),
+      ]),
     );
   }
 
