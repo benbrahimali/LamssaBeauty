@@ -10,6 +10,7 @@ import '../widgets/async_states.dart';
 import '../widgets/common_widgets.dart';
 import '../widgets/walk_in_sheet.dart';
 import '../widgets/my_pay_card.dart';
+import '../widgets/my_reviews.dart';
 
 /// Espace coiffeur : SON planning, SA caisse, SES tséb9as (§3.4).
 /// Aucune donnée du salon n'est visible ici — le backend le refuse d'ailleurs.
@@ -102,7 +103,7 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
     final error = await controller.addWalkIn(
       salonId: salonId,
       staffId: staffId,
-      serviceId: payload.serviceId,
+      serviceIds: payload.serviceIds,
       clientName: payload.clientName,
       payNow: payload.payNow,
       method: payload.method,
@@ -200,6 +201,14 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
                     week: controller.week,
                     month: controller.month,
                     onTap: () => MyPaySheet.show(context),
+                  ),
+                ),
+                // Ce que ses clients pensent de lui : la note qu'ils voient
+                // sur sa carte, et ce qu'ils ont écrit.
+                SliverToBoxAdapter(
+                  child: MyRatingCard(
+                    reviews: controller.reviews,
+                    onTap: () => MyReviewsSheet.show(context),
                   ),
                 ),
               SliverToBoxAdapter(

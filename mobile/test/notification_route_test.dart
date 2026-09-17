@@ -59,7 +59,9 @@ void main() {
   group('Avis et publications', () {
     test('seul le gérant est envoyé vers la modération', () {
       expect(targetFor('new_review', AppRole.owner), NotificationTarget.reviews);
-      expect(targetFor('new_review', AppRole.coiffeur), NotificationTarget.none);
+      // Le coiffeur n'a rien à modérer, mais il doit pouvoir lire l'avis.
+      expect(targetFor('new_review', AppRole.coiffeur), NotificationTarget.myReviews);
+      expect(isActionable('new_review', AppRole.coiffeur), isTrue);
       expect(targetFor('new_review', AppRole.client), NotificationTarget.none);
     });
 

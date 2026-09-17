@@ -39,6 +39,7 @@ import 'theme/app_theme.dart';
 import 'widgets/async_states.dart';
 import 'widgets/bottom_nav.dart';
 import 'widgets/reviews_moderation_sheet.dart';
+import 'widgets/my_reviews.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -163,6 +164,9 @@ class _AppShellState extends State<_AppShell> {
       case NotificationTarget.reviews:
         final salonId = _auth.context?.ownedSalonId;
         if (salonId != null) ReviewsModerationSheet.show(context, salonId);
+
+      case NotificationTarget.myReviews:
+        MyReviewsSheet.show(context);
 
       case NotificationTarget.trending:
         allerA(LamssaTab.trending);

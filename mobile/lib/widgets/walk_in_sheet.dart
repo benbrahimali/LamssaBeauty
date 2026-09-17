@@ -3,11 +3,14 @@ import 'package:flutter/material.dart';
 import '../data/models.dart';
 import '../theme/app_theme.dart';
 import 'common_widgets.dart';
+import '../core/money.dart';
 
 /// Ce que la feuille de saisie renvoie pour créer un walk-in.
 class WalkInPayload {
   final String staffId;
-  final String serviceId;
+
+  /// Une ou plusieurs prestations, dans l'ordre du catalogue.
+  final List<String> serviceIds;
   final String clientName;
 
   /// Encaisser tout de suite : le client de passage est déjà servi.
@@ -18,7 +21,7 @@ class WalkInPayload {
 
   const WalkInPayload({
     required this.staffId,
-    required this.serviceId,
+    required this.serviceIds,
     required this.clientName,
     this.payNow = false,
     this.method = 'cash',
@@ -50,7 +53,9 @@ class WalkInSheet extends StatefulWidget {
 class _WalkInSheetState extends State<WalkInSheet> {
   final _nameCtrl = TextEditingController();
   String? _staffId;
-  String? _serviceId;
+  /// Coupe + barbe se saisissent d'un coup : un client de passage prend
+  /// souvent plus d'une prestation.
+  final Set<String> _serviceIds = {};
 
   /// Activé par défaut : oublier « خلّص » laissait la recette du jour
   /// inchangée alors que le client avait payé.
@@ -64,7 +69,7 @@ class _WalkInSheetState extends State<WalkInSheet> {
         (widget.team.where((c) => c.available).isNotEmpty
             ? widget.team.firstWhere((c) => c.available).id
             : widget.team.first.id);
-    _serviceId = widget.services.first.id;
+    _serviceIds.add(widget.services.first.id);
   }
 
   @override
@@ -73,7 +78,11 @@ class _WalkInSheetState extends State<WalkInSheet> {
     super.dispose();
   }
 
-  bool get _valid => _staffId != null && _serviceId != null;
+  bool get _valid => _staffId != null && _serviceIds.isNotEmpty;
+
+  double get _total => widget.services
+      .where((s) => _serviceIds.contains(s.id))
+      .fold(0.0, (total, s) => total + s.price);
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +144,7 @@ class _WalkInSheetState extends State<WalkInSheet> {
               const SizedBox(height: 16),
             ],
 
-            _label('الخدمة'),
+            _label('الخدمة — وحدة ولا أكثر'),
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 180),
               child: SingleChildScrollView(
@@ -148,13 +157,26 @@ class _WalkInSheetState extends State<WalkInSheet> {
                         : service.name;
                     return _chip(
                       label: '$title · ${service.price.toStringAsFixed(0)} DT',
-                      selected: _serviceId == service.id,
-                      onTap: () => setState(() => _serviceId = service.id),
+                      selected: _serviceIds.contains(service.id),
+                      onTap: () => setState(() {
+                        if (!_serviceIds.remove(service.id)) {
+                          _serviceIds.add(service.id);
+                        }
+                      }),
                     );
                   }).toList(),
                 ),
               ),
             ),
+            if (_serviceIds.length > 1) ...[
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text('المجموع : ${formatDt(_total)}',
+                    style: AppTextStyle.dmSans(
+                        size: 13, weight: FontWeight.w700, color: AppColors.gold)),
+              ),
+            ],
             const SizedBox(height: 16),
             _buildPayNow(),
             const SizedBox(height: 22),
@@ -166,7 +188,10 @@ class _WalkInSheetState extends State<WalkInSheet> {
                 context,
                 WalkInPayload(
                   staffId: _staffId!,
-                  serviceId: _serviceId!,
+                  serviceIds: [
+                    for (final s in widget.services)
+                      if (_serviceIds.contains(s.id)) s.id,
+                  ],
                   clientName: _nameCtrl.text.trim().isEmpty
                       ? 'زبون طيّاح'
                       : _nameCtrl.text.trim(),

@@ -295,7 +295,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
 
     final error = await cash.addWalkIn(
       staffId: payload.staffId,
-      serviceId: payload.serviceId,
+      serviceIds: payload.serviceIds,
       clientName: payload.clientName,
       payNow: payload.payNow,
       method: payload.method,

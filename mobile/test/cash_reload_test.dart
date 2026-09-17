@@ -45,6 +45,7 @@ class _FauxRdv extends BookingRepository {
 
   bool refuserEncaissement = false;
   int crees = 0;
+  List<String> prestations = const [];
   final encaissements = <(String, String)>[];
 
   @override
@@ -65,6 +66,7 @@ class _FauxRdv extends BookingRepository {
     String clientPhone = '',
   }) async {
     crees++;
+    prestations = serviceIds;
     return const Booking(id: 'w1');
   }
 
@@ -159,16 +161,26 @@ void main() {
       final (c, rdv) = await pret();
 
       final erreur = await c.addWalkIn(
-          staffId: 'st1', serviceId: 'coupe', clientName: 'Mehdi', payNow: true, method: 'card');
+          staffId: 'st1', serviceIds: ['coupe'], clientName: 'Mehdi', payNow: true, method: 'card');
 
       expect(erreur, isNull);
       expect(rdv.encaissements, [('w1', 'card')]);
     });
 
+    test('un walk-in peut porter plusieurs prestations', () async {
+      final (c, rdv) = await pret();
+
+      await c.addWalkIn(
+          staffId: 'st1', serviceIds: ['coupe', 'barbe'], clientName: 'Mehdi', payNow: true);
+
+      expect(rdv.prestations, ['coupe', 'barbe']);
+      expect(rdv.encaissements, [('w1', 'cash')], reason: 'encaissé en une fois');
+    });
+
     test('sans « خلّص توّا », le rendez-vous attend son encaissement', () async {
       final (c, rdv) = await pret();
 
-      await c.addWalkIn(staffId: 'st1', serviceId: 'coupe', clientName: 'Mehdi');
+      await c.addWalkIn(staffId: 'st1', serviceIds: ['coupe'], clientName: 'Mehdi');
 
       expect(rdv.crees, 1);
       expect(rdv.encaissements, isEmpty);
@@ -179,7 +191,7 @@ void main() {
       rdv.refuserEncaissement = true;
 
       final erreur = await c.addWalkIn(
-          staffId: 'st1', serviceId: 'coupe', clientName: 'Mehdi', payNow: true);
+          staffId: 'st1', serviceIds: ['coupe'], clientName: 'Mehdi', payNow: true);
 
       expect(erreur, contains('تزاد'), reason: 'il existe : ne pas le ressaisir');
       expect(rdv.crees, 1);

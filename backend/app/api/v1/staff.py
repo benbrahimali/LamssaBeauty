@@ -51,6 +51,46 @@ async def my_agenda(
     }
 
 
+def review_card(review) -> dict:
+    """Un avis tel que le coiffeur le lit : la note, le mot, la date.
+
+    Jamais qui l'a écrit : le client a noté une prestation, pas signé une
+    lettre, et le nommer l'exposerait à une rancune.
+    """
+    return {
+        "id": str(review.id),
+        "rating": review.rating,
+        "comment": review.comment,
+        "created_at": review.created_at,
+    }
+
+
+# Déclarée avant `/{staff_id}` : sinon « me » serait lu comme un identifiant.
+@router.get("/me/reviews", summary="Mes avis et ma note")
+async def my_reviews(
+    limit: int = Query(50, ge=1, le=100),
+    staff: StaffMember = Depends(my_staff_profile),
+):
+    """Le coiffeur voit ce que ses clients pensent de lui.
+
+    Seuls les avis publiés : ceux que le gérant a masqués pour abus restent
+    masqués ici aussi.
+    """
+    avis = (
+        await Review.find(
+            Review.staff_id == staff.id, Review.status == ReviewStatus.PUBLISHED
+        )
+        .sort("-created_at")
+        .limit(limit)
+        .to_list()
+    )
+    return {
+        "rating_avg": staff.rating_avg,
+        "rating_count": staff.rating_count,
+        "reviews": [review_card(a) for a in avis],
+    }
+
+
 @router.get("/{staff_id}", summary="Profil public d'un coiffeur")
 async def staff_profile(
     staff_id: PydanticObjectId, viewer: User | None = Depends(optional_user)

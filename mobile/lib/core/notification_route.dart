@@ -17,6 +17,9 @@ enum NotificationTarget {
   /// Modération des avis, réservée au gérant du salon.
   reviews,
 
+  /// Les avis reçus par le coiffeur.
+  myReviews,
+
   /// Fil des réalisations.
   trending,
 
@@ -51,10 +54,13 @@ NotificationTarget targetFor(String type, AppRole role) {
           : NotificationTarget.cash;
 
     case 'new_review':
-      // Le gérant modère ; le coiffeur et le client n'ont rien à décider.
-      return role == AppRole.owner
-          ? NotificationTarget.reviews
-          : NotificationTarget.none;
+      // Le gérant modère. Le coiffeur n'a rien à décider, mais tout à lire :
+      // « Nouvel avis 2/5 » sans pouvoir ouvrir l'avis était une impasse.
+      return switch (role) {
+        AppRole.owner => NotificationTarget.reviews,
+        AppRole.coiffeur => NotificationTarget.myReviews,
+        AppRole.client => NotificationTarget.none,
+      };
 
     case 'new_portfolio':
       return NotificationTarget.trending;

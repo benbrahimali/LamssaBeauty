@@ -12,6 +12,22 @@ from app.services.notification_service import notify
 router = APIRouter()
 
 
+def review_recipients(
+    staff_user_id: PydanticObjectId | None, owner_id: PydanticObjectId | None
+) -> list[tuple[PydanticObjectId, str]]:
+    """Qui prévenir d'un nouvel avis : le coiffeur noté, et le gérant qui modère.
+
+    Le gérant n'était jamais prévenu, alors que c'est lui qui masque un avis
+    abusif. Un gérant qui coupe lui-même ne reçoit qu'une notification.
+    """
+    destinataires: list[tuple[PydanticObjectId, str]] = []
+    if staff_user_id:
+        destinataires.append((staff_user_id, "staff"))
+    if owner_id and owner_id != staff_user_id:
+        destinataires.append((owner_id, "owner"))
+    return destinataires
+
+
 async def _recompute_rating(doc, target_id: PydanticObjectId, field: str) -> None:
     """Met à jour la note moyenne dénormalisée d'un salon ou d'un coiffeur."""
     pipeline = [
@@ -55,11 +71,23 @@ async def create_review(body: ReviewCreate, user: User = Depends(current_user)):
         await _recompute_rating(salon, salon.id, "salon_id")
     if staff:
         await _recompute_rating(staff, staff.id, "staff_id")
+
+    commentaire = body.comment.strip()[:120]
+    for user_id, qui in review_recipients(
+        staff.user_id if staff else None, salon.owner_id if salon else None
+    ):
         await notify(
-            staff.user_id,
+            user_id,
             NotificationType.NEW_REVIEW,
-            f"Nouvel avis {body.rating}/5",
-            (body.comment[:120] or "Un client vient de vous noter."),
+            f"Nouvel avis {body.rating}/5"
+            if qui == "staff"
+            else f"Nouvel avis sur votre salon {body.rating}/5",
+            commentaire
+            or (
+                "Un client vient de vous noter."
+                if qui == "staff"
+                else "Un client vient de noter une prestation."
+            ),
             {"review_id": str(review.id)},
         )
     return review

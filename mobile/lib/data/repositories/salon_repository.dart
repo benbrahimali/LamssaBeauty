@@ -90,6 +90,10 @@ class SalonRepository {
     );
   }
 
+  /// Les avis du coiffeur connecté et sa note — anonymes, publiés seulement.
+  Future<MyReviews> myReviews() async =>
+      MyReviews.fromJson(await _api.get('/staff/me/reviews') as Map<String, dynamic>);
+
   /// Créneaux libres d'un coiffeur pour un jour donné.
   Future<List<BookingSlot>> slots({
     required String staffId,
@@ -199,5 +203,24 @@ class ReviewEntry {
         rating: (json['rating'] as num?)?.toInt() ?? 5,
         comment: json['comment']?.toString() ?? '',
         createdAt: relativeTime(json['created_at']?.toString()),
+      );
+}
+
+/// Ce que les clients pensent du coiffeur connecté (§3.8).
+class MyReviews {
+  const MyReviews({this.ratingAvg = 0, this.ratingCount = 0, this.reviews = const []});
+
+  final double ratingAvg;
+  final int ratingCount;
+  final List<ReviewEntry> reviews;
+
+  bool get hasReviews => ratingCount > 0;
+
+  factory MyReviews.fromJson(Map<String, dynamic> json) => MyReviews(
+        ratingAvg: (json['rating_avg'] as num?)?.toDouble() ?? 0,
+        ratingCount: (json['rating_count'] as num?)?.toInt() ?? 0,
+        reviews: ((json['reviews'] as List?) ?? const [])
+            .map((e) => ReviewEntry.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
       );
 }

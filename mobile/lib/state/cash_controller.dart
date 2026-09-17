@@ -170,7 +170,7 @@ class CashController extends ChangeNotifier {
   /// et c'est précisément ce qui pousse le gérant à adopter l'outil.
   Future<String?> addWalkIn({
     required String staffId,
-    required String serviceId,
+    required List<String> serviceIds,
     required String clientName,
     DateTime? start,
     bool payNow = false,
@@ -182,7 +182,7 @@ class CashController extends ChangeNotifier {
       final rdv = await _bookings.createWalkIn(
         salonId: salonId,
         staffId: staffId,
-        serviceIds: [serviceId],
+        serviceIds: serviceIds,
         // Un walk-in décrit un client déjà sur place : par défaut, maintenant.
         startIso: (start ?? DateTime.now()).toUtc().toIso8601String(),
         clientName: clientName,
@@ -335,6 +335,9 @@ class MyCashController extends ChangeNotifier {
   /// serveur ne répond pas : la carte se masque plutôt que d'afficher zéro.
   PayrollLine? _week;
   MonthBalance? _month;
+
+  /// Sa note et ses avis. Null si non chargés : la carte se masque.
+  MyReviews? _reviews;
   List<Advance> _advances = const [];
   List<Booking> _agenda = const [];
 
@@ -349,6 +352,7 @@ class MyCashController extends ChangeNotifier {
   MyCash get cash => _cashDay;
   PayrollLine? get week => _week;
   MonthBalance? get month => _month;
+  MyReviews? get reviews => _reviews;
   List<Advance> get advances => _advances;
   List<Booking> get agenda => _agenda;
   DateTime get agendaDay => _agendaDay;
@@ -406,7 +410,7 @@ class MyCashController extends ChangeNotifier {
   Future<String?> addWalkIn({
     required String salonId,
     required String staffId,
-    required String serviceId,
+    required List<String> serviceIds,
     required String clientName,
     bool payNow = false,
     String method = 'cash',
@@ -415,7 +419,7 @@ class MyCashController extends ChangeNotifier {
       final rdv = await _bookings.createWalkIn(
         salonId: salonId,
         staffId: staffId,
-        serviceIds: [serviceId],
+        serviceIds: serviceIds,
         startIso: DateTime.now().toUtc().toIso8601String(),
         clientName: clientName,
       );
@@ -477,6 +481,12 @@ class MyCashController extends ChangeNotifier {
       } on ApiException {
         _week = null;
         _month = null;
+      }
+      // Même règle : les avis ne bloquent pas le reste du tableau de bord.
+      try {
+        _reviews = await _salons.myReviews();
+      } on ApiException {
+        _reviews = null;
       }
     } on ApiException catch (e) {
       _error = e.message;
