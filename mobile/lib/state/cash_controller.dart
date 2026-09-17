@@ -233,10 +233,11 @@ class CashController extends ChangeNotifier {
     String bookingId, {
     String method = 'cash',
     double tip = 0,
+    List<String>? serviceIds,
   }) async {
     try {
       final result = await _bookings.complete(
-          bookingId: bookingId, method: method, tip: tip);
+          bookingId: bookingId, method: method, tip: tip, serviceIds: serviceIds);
       await load();
       return result;
     } on ApiException catch (e) {
@@ -501,10 +502,12 @@ class MyCashController extends ChangeNotifier {
     String bookingId, {
     String method = 'cash',
     double tip = 0,
+    List<String>? serviceIds,
   }) async {
     try {
       final result =
-          await _bookings.complete(bookingId: bookingId, method: method, tip: tip);
+          await _bookings.complete(
+              bookingId: bookingId, method: method, tip: tip, serviceIds: serviceIds);
       await load();
       return result;
     } on ApiException catch (e) {

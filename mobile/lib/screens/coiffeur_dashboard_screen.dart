@@ -11,6 +11,7 @@ import '../widgets/common_widgets.dart';
 import '../widgets/walk_in_sheet.dart';
 import '../widgets/my_pay_card.dart';
 import '../widgets/my_reviews.dart';
+import '../widgets/services_editor.dart';
 
 /// Espace coiffeur : SON planning, SA caisse, SES tséb9as (§3.4).
 /// Aucune donnée du salon n'est visible ici — le backend le refuse d'ailleurs.
@@ -117,11 +118,16 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
   }
 
   Future<void> _completeBooking(Booking booking) async {
+    // Le catalogue du salon, pour pouvoir ajouter une prestation faite sur place.
+    final cash = context.read<MyCashController>();
+    if (booking.salonId.isNotEmpty) await cash.loadCatalogue(booking.salonId);
+    if (!mounted) return;
+
     final result = await showModalBottomSheet<_CompletePayload>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _CompleteSheet(booking: booking),
+      builder: (_) => _CompleteSheet(booking: booking, catalogue: cash.services),
     );
     if (result == null || !mounted) return;
 
@@ -130,6 +136,7 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
       booking.id,
       method: result.method,
       tip: result.tip,
+      serviceIds: result.serviceIds,
     );
     if (!mounted) return;
 
@@ -538,12 +545,18 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
 class _CompletePayload {
   final String method;
   final double tip;
-  const _CompletePayload(this.method, this.tip);
+
+  /// Prestations finales si elles ont changé, null sinon.
+  final List<String>? serviceIds;
+  const _CompletePayload(this.method, this.tip, [this.serviceIds]);
 }
 
 class _CompleteSheet extends StatefulWidget {
-  const _CompleteSheet({required this.booking});
+  const _CompleteSheet({required this.booking, this.catalogue = const []});
   final Booking booking;
+
+  /// Catalogue du salon : pour ajouter une prestation faite sur place.
+  final List<ServiceItem> catalogue;
 
   @override
   State<_CompleteSheet> createState() => _CompleteSheetState();
@@ -552,6 +565,16 @@ class _CompleteSheet extends StatefulWidget {
 class _CompleteSheetState extends State<_CompleteSheet> {
   String _method = 'cash';
   final _tipCtrl = TextEditingController();
+
+  /// Prestations réellement faites, parties de celles réservées.
+  late final List<String> _ids = [...widget.booking.serviceIds];
+
+  void _toggle(String id) => setState(() {
+        if (!_ids.remove(id)) _ids.add(id);
+      });
+
+  List<String>? get _changement =>
+      servicesChanged(widget.booking.serviceIds, _ids) ? List.of(_ids) : null;
 
   @override
   void dispose() {
@@ -596,6 +619,15 @@ class _CompleteSheetState extends State<_CompleteSheet> {
               ),
             ),
         ]),
+        if (widget.catalogue.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          ServicesEditor(
+            catalogue: widget.catalogue,
+            selected: _ids,
+            onToggle: _toggle,
+            fallbackTotal: widget.booking.price,
+          ),
+        ],
         const SizedBox(height: 16),
         TextField(
           controller: _tipCtrl,
@@ -610,9 +642,11 @@ class _CompleteSheetState extends State<_CompleteSheet> {
         const SizedBox(height: 20),
         GoldButton(
           text: 'أكد الخلاص',
+          enabled: _ids.isNotEmpty,
           onPressed: () => Navigator.pop(
             context,
-            _CompletePayload(_method, double.tryParse(_tipCtrl.text.trim()) ?? 0),
+            _CompletePayload(
+                _method, double.tryParse(_tipCtrl.text.trim()) ?? 0, _changement),
           ),
         ),
       ],

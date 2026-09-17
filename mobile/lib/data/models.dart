@@ -819,6 +819,9 @@ class Booking {
   /// Le client a déjà laissé son avis : le serveur refuserait un second.
   final bool reviewed;
 
+  /// Identifiants des prestations réservées.
+  final List<String> serviceIds;
+
   const Booking({
     required this.id,
     this.clientName = '',
@@ -835,6 +838,7 @@ class Booking {
     this.paymentId,
     this.paid = false,
     this.reviewed = false,
+    this.serviceIds = const [],
   });
 
   /// Seul un paiement en ligne encaissé est remboursable — le serveur refuse
@@ -876,6 +880,8 @@ class Booking {
       paymentId: json['payment_id']?.toString(),
       paid: json['payment_status'] == 'paid',
       reviewed: json['reviewed'] == true,
+      serviceIds: (json['service_ids'] as List?)?.map((e) => e.toString()).toList() ??
+          const [],
     );
   }
 }

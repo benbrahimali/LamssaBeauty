@@ -35,6 +35,9 @@ class BookingComplete(BaseModel):
     tip: float = Field(default=0.0, ge=0)
     amount_override: float | None = Field(default=None, gt=0)  # remise / supplément
     override_reason: str = ""
+    # Prestations réellement faites, si elles diffèrent de la réservation :
+    # une ajoutée sur place, une prévue mais pas faite. Absent = inchangées.
+    service_ids: list[PydanticObjectId] | None = Field(default=None, min_length=1)
 
 
 class PaymentVoid(BaseModel):

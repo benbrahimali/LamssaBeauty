@@ -129,3 +129,73 @@ class SplitEngine:
             product_cost=getattr(service, "product_cost", 0.0) if service else 0.0,
             tip_staff_pct=getattr(salon, "tip_staff_pct", 100.0) if salon else 100.0,
         )
+
+    @staticmethod
+    def for_services(
+        amount: float,
+        staff,
+        services,
+        tip: float = 0.0,
+        *,
+        salon=None,
+    ) -> SplitResult:
+        """Partage d'un rendez-vous de plusieurs prestations.
+
+        Seule la première prestation portait le taux : sur « coupe + couleur »,
+        le taux et le coût produit de la couleur étaient ignorés. Chaque
+        prestation applique maintenant les siens.
+
+        Le montant encaissé — remise comprise — est réparti au prorata du prix
+        catalogue de chaque prestation. Le pourboire est partagé une seule fois.
+
+        Exception : en « fixe + pourcentage », le fixe est une garantie par
+        rendez-vous. Le calculer prestation par prestation le multiplierait ;
+        on garde donc un seul calcul, avec le coût produit de toutes.
+        """
+        services = list(services or [])
+        if len(services) <= 1:
+            return SplitEngine.for_staff(
+                amount, staff, tip, service=services[0] if services else None, salon=salon
+            )
+
+        pourboire_pct = getattr(salon, "tip_staff_pct", 100.0) if salon else 100.0
+
+        if staff.commission_type is CommissionType.FIXED_PLUS_PERCENT:
+            return SplitEngine.compute(
+                amount,
+                commission_type=staff.commission_type,
+                commission_pct=SplitEngine.rate_for(staff, None, salon),
+                commission_fixed=staff.commission_fixed,
+                tip=tip,
+                product_cost=sum(getattr(s, "product_cost", 0.0) for s in services),
+                tip_staff_pct=pourboire_pct,
+            )
+
+        catalogue = sum(s.price for s in services)
+        reste = round(amount, 2)
+        part_employe = 0.0
+        produits = 0.0
+        for i, service in enumerate(services):
+            if i == len(services) - 1:
+                # La dernière prend le reste : les arrondis ne perdent pas de centime.
+                montant = reste
+            elif catalogue > 0:
+                montant = round(amount * service.price / catalogue, 2)
+            else:
+                montant = round(amount / len(services), 2)
+            reste = round(reste - montant, 2)
+            partie = SplitEngine.for_staff(montant, staff, 0.0, service=service, salon=salon)
+            part_employe += partie.staff_share
+            produits += partie.product_cost
+
+        part_employe = round(part_employe, 2)
+        pourboire = SplitEngine.compute(0.0, tip=tip, tip_staff_pct=pourboire_pct)
+        return SplitResult(
+            amount=round(amount, 2),
+            salon_share=round(amount - part_employe, 2),
+            staff_share=part_employe,
+            tip=pourboire.tip,
+            product_cost=round(produits, 2),
+            salon_tip=pourboire.salon_tip,
+        )
+

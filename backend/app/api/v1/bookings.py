@@ -1,5 +1,5 @@
 """Réservations (§3.3) : création, agenda, machine à états, clôture de prestation."""
-from datetime import date
+from datetime import date, timedelta
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -41,11 +41,30 @@ from app.services.booking_service import (
     assert_can_cancel,
     available_slots,
     create_booking,
+    resolve_services,
+    total_duration,
+    total_price,
 )
 from app.services.notification_service import notify, notify_many
 from app.services.split_engine import SplitEngine
 
 router = APIRouter()
+
+
+def service_changes(before: list, after: list) -> tuple[list, list]:
+    """Prestations ajoutées et retirées, dans l'ordre, sans doublon."""
+    avant, apres = list(dict.fromkeys(before)), list(dict.fromkeys(after))
+    return [s for s in apres if s not in avant], [s for s in avant if s not in apres]
+
+
+def services_change_note(added: list[str], removed: list[str]) -> str:
+    """Trace lisible d'un changement de prestations, gardée dans la note du RDV.
+
+    Sans elle, un prix encaissé différent de la réservation ne s'expliquerait
+    plus : ni pour le client, ni pour le gérant qui relit sa caisse.
+    """
+    morceaux = [f"+ {n}" for n in added] + [f"− {n}" for n in removed]
+    return "prestations modifiées : " + ", ".join(morceaux) if morceaux else ""
 
 
 def mark_reviewed(bookings: list[dict], reviewed_ids: set[str]) -> list[dict]:
@@ -291,19 +310,55 @@ async def complete(
     if not staff:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Coiffeur du RDV introuvable")
 
+    # Prestations réellement faites : une ajoutée sur place, une prévue mais
+    # pas faite. Le RDV est corrigé AVANT le calcul, pour que le prix, la
+    # durée et le partage portent sur ce qui a eu lieu.
+    ids = list(booking.service_ids)
+    ajoutes: list = []
+    retires: list = []
+    if body.service_ids is not None:
+        ajoutes, retires = service_changes(booking.service_ids, body.service_ids)
+    modifie = bool(ajoutes or retires)
+    if modifie:
+        if booking.payment_status is PaymentStatus.PAID and booking.payment_id:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "Réservation payée en ligne : ses prestations ne peuvent plus changer. "
+                "Encaissez-la telle quelle, et saisissez un walk-in pour le supplément.",
+            )
+        # Seules les ajoutées sont contrôlées : une prestation réservée puis
+        # retirée du catalogue ne doit pas bloquer l'encaissement.
+        if ajoutes:
+            await resolve_services(booking.salon_id, ajoutes)
+        ids = list(dict.fromkeys(body.service_ids))
+
+    services = await Service.find({"_id": {"$in": ids}}).to_list()
+    rang = {sid: i for i, sid in enumerate(ids)}
+    services.sort(key=lambda s: rang.get(s.id, len(rang)))
+
+    if modifie:
+        if len(services) != len(ids):
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Service introuvable")
+        noms_retires = (
+            [s.name for s in await Service.find({"_id": {"$in": retires}}).to_list()]
+            if retires
+            else []
+        )
+        noms_ajoutes = [s.name for s in services if s.id in set(ajoutes)]
+        booking.service_ids = ids
+        booking.service_names = [s.name for s in services]
+        booking.price_total = total_price(services)
+        booking.end = booking.start + timedelta(minutes=total_duration(services))
+        booking.note = (
+            f"{booking.note} | {services_change_note(noms_ajoutes, noms_retires)}"
+        ).strip(" |")
+
     amount = body.amount_override if body.amount_override is not None else booking.price_total
 
     # La règle appliquée est celle du salon, ajustée pour ce coiffeur puis pour
-    # cette prestation : c'est là que chaque salon retrouve son organisation.
-    # Sur un RDV multi-services, le premier porte le taux — les prestations
-    # d'un même rendez-vous relèvent presque toujours de la même entente.
+    # chaque prestation : une couleur ne se partage pas comme une coupe.
     salon = await Salon.get(booking.salon_id)
-    service = (
-        await Service.get(booking.service_ids[0]) if booking.service_ids else None
-    )
-    split = SplitEngine.for_staff(
-        amount, staff, tip=body.tip, service=service, salon=salon
-    )
+    split = SplitEngine.for_services(amount, staff, services, tip=body.tip, salon=salon)
 
     tx = Transaction(
         booking_id=booking.id,

@@ -109,11 +109,14 @@ class BookingRepository {
     String method = 'cash',
     double tip = 0,
     double? amountOverride,
+    List<String>? serviceIds,
   }) async {
     final data = await _api.post('/bookings/$bookingId/complete', body: {
       'method': method,
       'tip': tip,
       if (amountOverride != null) 'amount_override': amountOverride,
+      // Prestations réellement faites, seulement si elles ont changé.
+      if (serviceIds != null) 'service_ids': serviceIds,
     }) as Map<String, dynamic>;
 
     final split = Map<String, dynamic>.from(data['split'] as Map);

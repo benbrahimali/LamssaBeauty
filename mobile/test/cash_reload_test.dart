@@ -76,6 +76,7 @@ class _FauxRdv extends BookingRepository {
     String method = 'cash',
     double tip = 0,
     double? amountOverride,
+    List<String>? serviceIds,
   }) async {
     if (refuserEncaissement) throw const ApiException(409, 'Journée clôturée');
     encaissements.add((bookingId, method));

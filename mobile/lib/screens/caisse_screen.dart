@@ -18,6 +18,7 @@ import '../widgets/common_widgets.dart';
 import '../widgets/walk_in_sheet.dart';
 import '../widgets/prompt_dialog.dart';
 import '../core/money.dart';
+import '../widgets/services_editor.dart';
 
 /// Caisse du salon (§3.4) : encaissement, split par employé, clôture de journée.
 class CaisseScreen extends StatefulWidget {
@@ -46,7 +47,10 @@ class _CaisseScreenState extends State<CaisseScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _CompleteSheet(booking: booking),
+      builder: (_) => _CompleteSheet(
+        booking: booking,
+        catalogue: context.read<CashController>().services,
+      ),
     );
     if (payload == null || !mounted) return;
 
@@ -55,6 +59,7 @@ class _CaisseScreenState extends State<CaisseScreen> {
       booking.id,
       method: payload.method,
       tip: payload.tip,
+      serviceIds: payload.serviceIds,
     );
     if (!mounted) return;
 
@@ -941,12 +946,18 @@ class _CaisseScreenState extends State<CaisseScreen> {
 class _CompletePayload {
   final String method;
   final double tip;
-  const _CompletePayload(this.method, this.tip);
+
+  /// Prestations finales si elles ont changé, null sinon.
+  final List<String>? serviceIds;
+  const _CompletePayload(this.method, this.tip, [this.serviceIds]);
 }
 
 class _CompleteSheet extends StatefulWidget {
-  const _CompleteSheet({required this.booking});
+  const _CompleteSheet({required this.booking, this.catalogue = const []});
   final Booking booking;
+
+  /// Catalogue du salon : pour ajouter une prestation faite sur place.
+  final List<ServiceItem> catalogue;
 
   @override
   State<_CompleteSheet> createState() => _CompleteSheetState();
@@ -955,6 +966,16 @@ class _CompleteSheet extends StatefulWidget {
 class _CompleteSheetState extends State<_CompleteSheet> {
   String _method = 'cash';
   final _tipCtrl = TextEditingController();
+
+  /// Prestations réellement faites, parties de celles réservées.
+  late final List<String> _ids = [...widget.booking.serviceIds];
+
+  void _toggle(String id) => setState(() {
+        if (!_ids.remove(id)) _ids.add(id);
+      });
+
+  List<String>? get _changement =>
+      servicesChanged(widget.booking.serviceIds, _ids) ? List.of(_ids) : null;
 
   @override
   void dispose() {
@@ -1026,6 +1047,15 @@ class _CompleteSheetState extends State<_CompleteSheet> {
                 ),
               ),
           ]),
+          if (widget.catalogue.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            ServicesEditor(
+              catalogue: widget.catalogue,
+              selected: _ids,
+              onToggle: _toggle,
+              fallbackTotal: widget.booking.price,
+            ),
+          ],
           const SizedBox(height: 16),
           TextField(
             controller: _tipCtrl,
@@ -1040,10 +1070,11 @@ class _CompleteSheetState extends State<_CompleteSheet> {
           const SizedBox(height: 20),
           GoldButton(
             text: 'أكد الخلاص',
+            enabled: _ids.isNotEmpty,
             onPressed: () => Navigator.pop(
               context,
-              _CompletePayload(
-                  _method, double.tryParse(_tipCtrl.text.trim()) ?? 0),
+              _CompletePayload(_method,
+                  double.tryParse(_tipCtrl.text.trim()) ?? 0, _changement),
             ),
           ),
         ]),
