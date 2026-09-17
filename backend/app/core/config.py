@@ -39,8 +39,11 @@ class Settings(BaseSettings):
     # ── Réservation (§3.3) ───────────────────────────────────────────────
     SLOT_LOCK_TTL_SEC: int = 30
     SLOT_STEP_MIN: int = 15                # granularité de la grille de créneaux
-    PENDING_TIMEOUT_MIN: int = 15          # PENDING -> CANCELLED si non payé
-    NO_SHOW_GRACE_MIN: int = 20            # CONFIRMED -> NO_SHOW après l'heure
+    # Paiement en ligne : le créneau reste bloqué 30 min le temps de payer.
+    PENDING_TIMEOUT_MIN: int = 30          # PENDING -> CANCELLED si non payé
+    # Client en retard : 30 min après l'heure sans « خلّص », il est déclaré
+    # absent. Il reste encaissable s'il était bien là.
+    NO_SHOW_GRACE_MIN: int = 30            # CONFIRMED -> NO_SHOW après l'heure
     DEFAULT_CANCEL_WINDOW_H: int = 2       # annulation client jusqu'à H-2
     TIMEZONE: str = "Africa/Tunis"
 

@@ -10,6 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.api.v1.bookings import no_show_too_early
+from app.core.config import Settings, settings
 from app.models.enums import BookingSource, BookingStatus
 from app.schemas.booking import BookingCreate
 from app.services.booking_service import assert_transition, initial_status
@@ -51,27 +52,28 @@ def test_un_mode_inconnu_est_refuse():
 
 
 # ── Client absent ────────────────────────────────────────────────────────────
-def test_un_client_servi_le_matin_n_est_pas_absent_l_apres_midi():
-    """RDV à 10:00, encaissé à 15:00 : la tâche ne doit pas l'avoir déclaré absent."""
-    maintenant = datetime(2026, 9, 17, 14, tzinfo=timezone.utc)  # 15:00 à Tunis
-    rdv_du_matin = datetime(2026, 9, 17, 9, tzinfo=timezone.utc)  # 10:00 à Tunis
-
-    assert not rdv_du_matin < no_show_cutoff(maintenant)
+MAINTENANT = datetime(2026, 9, 17, 10, 0, tzinfo=timezone.utc)
+GRACE = settings.NO_SHOW_GRACE_MIN
 
 
-def test_un_rdv_de_la_veille_non_encaisse_est_declare_absent():
-    maintenant = datetime(2026, 9, 17, 8, tzinfo=timezone.utc)
-    hier_soir = datetime(2026, 9, 16, 17, tzinfo=timezone.utc)
+def test_les_deux_delais_sont_d_une_demi_heure_par_defaut():
+    """Le code fixe 30 min ; une variable d'environnement peut les changer."""
+    assert Settings.model_fields["PENDING_TIMEOUT_MIN"].default == 30
+    assert Settings.model_fields["NO_SHOW_GRACE_MIN"].default == 30
 
-    assert hier_soir < no_show_cutoff(maintenant)
+
+def test_un_client_en_retard_dans_le_delai_n_est_pas_absent():
+    rdv = MAINTENANT - timedelta(minutes=GRACE - 5)
+    assert not rdv < no_show_cutoff(MAINTENANT)
 
 
-def test_le_delai_de_grace_reste_respecte_juste_apres_minuit():
-    """RDV à 23:50, 00:05 le lendemain : trop tôt pour le dire absent."""
-    maintenant = datetime(2026, 9, 16, 23, 5, tzinfo=timezone.utc)  # 00:05 à Tunis
-    rdv = datetime(2026, 9, 16, 22, 50, tzinfo=timezone.utc)  # 23:50 à Tunis la veille
+def test_un_client_en_retard_au_dela_du_delai_est_absent():
+    rdv = MAINTENANT - timedelta(minutes=GRACE + 5)
+    assert rdv < no_show_cutoff(MAINTENANT)
 
-    assert not rdv < no_show_cutoff(maintenant)
+
+def test_un_rdv_a_venir_n_est_jamais_absent():
+    assert not (MAINTENANT + timedelta(hours=1)) < no_show_cutoff(MAINTENANT)
 
 
 def test_ma_jach_avant_l_heure_est_refuse():

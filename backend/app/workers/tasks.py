@@ -112,13 +112,12 @@ def expire_pending():
 def no_show_cutoff(now: datetime):
     """Heure avant laquelle un RDV confirmé non encaissé est déclaré absent.
 
-    Vingt minutes après l'heure, c'était trop tôt : un salon encaisse en fin de
-    prestation, souvent plus tard, et le client déjà servi devenait « absent »
-    — impossible à encaisser. On attend la fin de la journée : le salon a tout
-    le jour pour dire « خلّص » ou « ما جاش ».
+    NO_SHOW_GRACE_MIN (30 min) après l'heure du RDV : un client en retard de
+    plus d'une demi-heure libère le créneau. Déclarer absent un client venu
+    mais encaissé plus tard n'est plus bloquant : un RDV « absent » reste
+    encaissable, et « خلّص » corrige le statut.
     """
-    debut_du_jour, _ = local_day_bounds(to_local(now).date())
-    return min(debut_du_jour, now - timedelta(minutes=settings.NO_SHOW_GRACE_MIN))
+    return now - timedelta(minutes=settings.NO_SHOW_GRACE_MIN)
 
 
 async def _mark_no_shows() -> int:
