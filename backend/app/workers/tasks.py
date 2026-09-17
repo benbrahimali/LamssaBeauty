@@ -1,6 +1,6 @@
 """Tâches asynchrones : rappels J-1 / H-2, expiration des PENDING, no-shows, clôture."""
 import logging
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 from app.core.config import settings
 from app.core.timeutils import local_day_bounds, to_local, utcnow
@@ -109,10 +109,21 @@ def expire_pending():
     return count
 
 
+def no_show_cutoff(now: datetime):
+    """Heure avant laquelle un RDV confirmé non encaissé est déclaré absent.
+
+    Vingt minutes après l'heure, c'était trop tôt : un salon encaisse en fin de
+    prestation, souvent plus tard, et le client déjà servi devenait « absent »
+    — impossible à encaisser. On attend la fin de la journée : le salon a tout
+    le jour pour dire « خلّص » ou « ما جاش ».
+    """
+    debut_du_jour, _ = local_day_bounds(to_local(now).date())
+    return min(debut_du_jour, now - timedelta(minutes=settings.NO_SHOW_GRACE_MIN))
+
+
 async def _mark_no_shows() -> int:
-    cutoff = utcnow() - timedelta(minutes=settings.NO_SHOW_GRACE_MIN)
     missed = await Booking.find(
-        Booking.status == BookingStatus.CONFIRMED, Booking.start <= cutoff
+        Booking.status == BookingStatus.CONFIRMED, Booking.start < no_show_cutoff(utcnow())
     ).to_list()
     for booking in missed:
         booking.status = BookingStatus.NO_SHOW

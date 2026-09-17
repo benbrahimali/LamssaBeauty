@@ -208,6 +208,7 @@ class BookingController extends ChangeNotifier {
         staffId: _staffId,
         serviceIds: _serviceIds,
         startIso: _slot!.start,
+        payOnline: payOnline,
       );
 
       if (payOnline) {

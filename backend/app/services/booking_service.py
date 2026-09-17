@@ -242,6 +242,7 @@ async def create_booking(
     client_name: str = "",
     client_phone: str = "",
     note: str = "",
+    pay_online: bool = False,
 ) -> Booking:
     """Crée un RDV en garantissant l'absence de double réservation.
 
@@ -309,15 +310,26 @@ async def create_booking(
             client_name=client_name,
             client_phone=client_phone,
             note=note,
-            # Un walk-in est déjà « en salon » : il est confirmé d'office.
-            status=BookingStatus.CONFIRMED
-            if source is BookingSource.WALKIN
-            else BookingStatus.PENDING,
+            status=initial_status(source=source, pay_online=pay_online),
         )
         await booking.insert()
         return booking
     finally:
         await redis.delete(lock_key)
+
+
+def initial_status(*, source: BookingSource, pay_online: bool) -> BookingStatus:
+    """Statut d'un RDV à sa création.
+
+    Un RDV payé au salon restait « en attente » sans que personne ne puisse le
+    confirmer dans l'app, et la tâche des RDV non payés l'annulait au bout de
+    quinze minutes : le salon perdait tous ses clients. Le créneau a été vérifié
+    libre à la réservation, il est donc confirmé d'office. Seul un paiement en
+    ligne attend : c'est pour lui que l'expiration existe.
+    """
+    if source is BookingSource.WALKIN or not pay_online:
+        return BookingStatus.CONFIRMED
+    return BookingStatus.PENDING
 
 
 # ─────────────────────────────────────────────────────────────────────────────

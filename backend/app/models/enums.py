@@ -53,7 +53,9 @@ BOOKING_TRANSITIONS: dict[BookingStatus, set[BookingStatus]] = {
     BookingStatus.IN_PROGRESS: {BookingStatus.DONE, BookingStatus.CANCELLED},
     BookingStatus.DONE: set(),
     BookingStatus.CANCELLED: set(),
-    BookingStatus.NO_SHOW: set(),
+    # Un client marqué absent par erreur (ou par la tâche du lendemain) a pu
+    # venir : le salon doit pouvoir l'encaisser quand même.
+    BookingStatus.NO_SHOW: {BookingStatus.IN_PROGRESS},
 }
 
 #: Statuts qui occupent réellement un créneau dans l'agenda.

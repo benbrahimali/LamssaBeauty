@@ -53,8 +53,13 @@ def test_transitions_interdites(depart, arrivee):
 
 
 def test_les_etats_terminaux_sont_bien_terminaux():
-    for etat in (BookingStatus.DONE, BookingStatus.CANCELLED, BookingStatus.NO_SHOW):
+    for etat in (BookingStatus.DONE, BookingStatus.CANCELLED):
         assert BOOKING_TRANSITIONS[etat] == set()
+
+
+def test_un_absent_se_corrige_seulement_par_un_encaissement():
+    """Le salon qui encaisse un client marqué absent prouve qu'il est venu."""
+    assert BOOKING_TRANSITIONS[BookingStatus.NO_SHOW] == {BookingStatus.IN_PROGRESS}
 
 
 # ── Bornes temporelles ───────────────────────────────────────────────────────

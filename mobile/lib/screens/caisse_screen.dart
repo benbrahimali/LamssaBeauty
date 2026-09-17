@@ -19,6 +19,8 @@ import '../widgets/walk_in_sheet.dart';
 import '../widgets/prompt_dialog.dart';
 import '../core/money.dart';
 import '../widgets/services_editor.dart';
+import '../core/booking_actions.dart';
+import '../widgets/booking_actions_menu.dart';
 
 /// Caisse du salon (§3.4) : encaissement, split par employé, clôture de journée.
 class CaisseScreen extends StatefulWidget {
@@ -337,6 +339,19 @@ class _CaisseScreenState extends State<CaisseScreen> {
               )),
         ),
       ),
+    );
+  }
+
+  Future<void> _changeStatus(Booking booking, BookingAction action) async {
+    if (!await confirmBookingAction(context, action) || !mounted) return;
+    final absent = action == BookingAction.noShow;
+    final erreur = await context.read<CashController>().changeStatus(
+        booking.id, absent ? BookingStatus.noShow : BookingStatus.cancelled);
+    if (!mounted) return;
+    showAppSnack(
+      context,
+      erreur ?? (absent ? 'تسجّل : الزبون ما جاش' : 'الموعد تبطّل — الزبون يوصلو إشعار'),
+      success: erreur == null,
     );
   }
 
@@ -667,8 +682,8 @@ class _CaisseScreenState extends State<CaisseScreen> {
               BookingStatus.done => AppColors.sub,
               _ => AppColors.red,
             };
-            final canComplete = booking.status == BookingStatus.confirmed ||
-                booking.status == BookingStatus.inProgress;
+            final actions = bookingActions(booking, DateTime.now());
+            final canComplete = actions.contains(BookingAction.complete);
 
             return Container(
               margin: const EdgeInsets.only(bottom: 10),
@@ -742,6 +757,11 @@ class _CaisseScreenState extends State<CaisseScreen> {
                       child: Icon(Icons.undo_rounded,
                           size: 18, color: AppColors.sub),
                     ),
+                  ),
+                if (BookingActionsMenu.hasItems(actions))
+                  BookingActionsMenu(
+                    actions: actions,
+                    onSelected: (a) => _changeStatus(booking, a),
                   ),
                 // Une journée clôturée est figée : proposer la correction
                 // mènerait à un refus du serveur.

@@ -14,6 +14,7 @@ class BookingRepository {
     required List<String> serviceIds,
     required String startIso,
     String note = '',
+    bool payOnline = false,
   }) async {
     final data = await _api.post('/bookings', body: {
       'salon_id': salonId,
@@ -21,6 +22,8 @@ class BookingRepository {
       'service_ids': serviceIds,
       'start': startIso,
       'source': 'app',
+      // Au salon : confirmé d'office. En ligne : attend le paiement.
+      'payment_mode': payOnline ? 'online' : 'on_site',
       'note': note,
     }) as Map<String, dynamic>;
     return Booking.fromJson(data);

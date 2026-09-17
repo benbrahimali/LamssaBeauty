@@ -12,6 +12,8 @@ import '../widgets/walk_in_sheet.dart';
 import '../widgets/my_pay_card.dart';
 import '../widgets/my_reviews.dart';
 import '../widgets/services_editor.dart';
+import '../core/booking_actions.dart';
+import '../widgets/booking_actions_menu.dart';
 
 /// Espace coiffeur : SON planning, SA caisse, SES tséb9as (§3.4).
 /// Aucune donnée du salon n'est visible ici — le backend le refuse d'ailleurs.
@@ -114,6 +116,19 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
       context,
       error ?? (payload.payNow ? 'زبون طيّاح تزاد وتخلّص ✅' : 'زبون طيّاح تزاد ✅'),
       success: error == null,
+    );
+  }
+
+  Future<void> _changeStatus(Booking booking, BookingAction action) async {
+    if (!await confirmBookingAction(context, action) || !mounted) return;
+    final absent = action == BookingAction.noShow;
+    final erreur = await context.read<MyCashController>().changeStatus(
+        booking.id, absent ? BookingStatus.noShow : BookingStatus.cancelled);
+    if (!mounted) return;
+    showAppSnack(
+      context,
+      erreur ?? (absent ? 'تسجّل : الزبون ما جاش' : 'الموعد تبطّل — الزبون يوصلو إشعار'),
+      success: erreur == null,
     );
   }
 
@@ -344,8 +359,8 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
             BookingStatus.done => AppColors.sub,
             _ => AppColors.red,
           };
-          final canComplete = booking.status == BookingStatus.confirmed ||
-              booking.status == BookingStatus.inProgress;
+          final actions = bookingActions(booking, DateTime.now());
+          final canComplete = actions.contains(BookingAction.complete);
 
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
@@ -393,6 +408,11 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
                       style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.sub)),
                 ]),
               ),
+              if (BookingActionsMenu.hasItems(actions))
+                BookingActionsMenu(
+                  actions: actions,
+                  onSelected: (a) => _changeStatus(booking, a),
+                ),
               const SizedBox(width: 8),
               canComplete
                   ? GestureDetector(

@@ -43,6 +43,7 @@ class _FausseReservation extends BookingRepository {
     required List<String> serviceIds,
     required String startIso,
     String note = '',
+    bool payOnline = false,
   }) async {
     prestationsReservees = serviceIds;
     return const Booking(id: 'b1');

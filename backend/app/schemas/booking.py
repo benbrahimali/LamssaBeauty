@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from beanie import PydanticObjectId
 from pydantic import BaseModel, Field, model_validator
@@ -12,6 +13,10 @@ class BookingCreate(BaseModel):
     service_ids: list[PydanticObjectId] = Field(min_length=1)
     start: datetime
     source: BookingSource = BookingSource.APP
+    # Au salon : le créneau est vérifié libre, le RDV est confirmé d'office.
+    # En ligne : il attend le paiement, et se libère s'il n'arrive pas.
+    # Absent (ancienne version de l'app) = au salon.
+    payment_mode: Literal["on_site", "online"] = "on_site"
     note: str = ""
     # Walk-in uniquement : identité du client sans compte
     client_name: str = ""

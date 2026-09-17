@@ -247,6 +247,17 @@ class CashController extends ChangeNotifier {
     }
   }
 
+  /// Marque un rendez-vous absent ou l'annule. Renvoie l'erreur, ou null.
+  Future<String?> changeStatus(String bookingId, BookingStatus status) async {
+    try {
+      await _bookings.changeStatus(bookingId, status);
+      await load();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    }
+  }
+
   /// Clôture la journée.
   ///
   /// [countedCash] null = le gérant n'a pas compté son tiroir ; l'écart n'est
@@ -514,6 +525,17 @@ class MyCashController extends ChangeNotifier {
       _error = e.message;
       notifyListeners();
       return null;
+    }
+  }
+
+  /// Marque un rendez-vous absent ou l'annule. Renvoie l'erreur, ou null.
+  Future<String?> changeStatus(String bookingId, BookingStatus status) async {
+    try {
+      await _bookings.changeStatus(bookingId, status);
+      await load();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
     }
   }
 

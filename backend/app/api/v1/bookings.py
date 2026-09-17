@@ -51,6 +51,11 @@ from app.services.split_engine import SplitEngine
 router = APIRouter()
 
 
+def no_show_too_early(start, now) -> bool:
+    """« ما جاش » avant l'heure du RDV : impossible de savoir qu'il ne viendra pas."""
+    return start > now
+
+
 def service_changes(before: list, after: list) -> tuple[list, list]:
     """Prestations ajoutées et retirées, dans l'ordre, sans doublon."""
     avant, apres = list(dict.fromkeys(before)), list(dict.fromkeys(after))
@@ -162,6 +167,7 @@ async def book(body: BookingCreate, user: User = Depends(current_user)):
         client_name=body.client_name,
         client_phone=body.client_phone,
         note=body.note,
+        pay_online=body.payment_mode == "online",
     )
 
     when = to_local(booking.start).strftime("%d/%m à %H:%M")
@@ -172,7 +178,9 @@ async def book(body: BookingCreate, user: User = Depends(current_user)):
     await notify_many(
         [staff.user_id, salon.owner_id],
         NotificationType.BOOKING_CONFIRMED,
-        "Nouveau rendez-vous",
+        "Nouveau rendez-vous"
+        if booking.status is BookingStatus.CONFIRMED
+        else "Nouveau rendez-vous — paiement en ligne en attente",
         f"{qui} — {when} avec {staff.display_name or 'votre équipe'}",
         {"booking_id": str(booking.id), "salon_id": str(salon.id)},
     )
@@ -257,6 +265,12 @@ async def patch_status(
     if body.status in (BookingStatus.IN_PROGRESS, BookingStatus.NO_SHOW) and user.role is Role.CLIENT:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Réservé au salon")
 
+    if body.status is BookingStatus.NO_SHOW and no_show_too_early(booking.start, utcnow()):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Le rendez-vous n'a pas encore commencé : impossible de le marquer absent.",
+        )
+
     previous = booking.status
     booking = await apply_transition(booking, body.status, user, body.reason)
 
@@ -298,7 +312,8 @@ async def complete(
 
     if booking.status is BookingStatus.DONE:
         raise HTTPException(status.HTTP_409_CONFLICT, "Prestation déjà encaissée")
-    if booking.status is BookingStatus.CONFIRMED:
+    # Un client marqué absent peut être encaissé : c'est la preuve qu'il est venu.
+    if booking.status in (BookingStatus.CONFIRMED, BookingStatus.NO_SHOW):
         booking = await apply_transition(booking, BookingStatus.IN_PROGRESS, user)
     if booking.status is not BookingStatus.IN_PROGRESS:
         raise HTTPException(
