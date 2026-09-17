@@ -356,9 +356,19 @@ async def apply_transition(
     return booking
 
 
-async def assert_can_cancel(booking: Booking, salon: Salon, actor: User) -> None:
-    """Le client respecte la fenêtre d'annulation du salon ; le pro peut toujours annuler."""
-    if actor.role in (Role.OWNER, Role.STAFF):
+async def assert_can_cancel(
+    booking: Booking, salon: Salon, actor: User, *, for_salon: bool | None = None
+) -> None:
+    """Le client respecte la fenêtre d'annulation du salon ; le salon peut toujours annuler.
+
+    `for_salon` dit si l'acteur agit pour CE salon. Le rôle du compte ne le dit
+    pas : un gérant qui réserve ailleurs y est un client comme un autre, et
+    échappait jusqu'ici au délai d'annulation.
+    """
+    pour_le_salon = (
+        for_salon if for_salon is not None else actor.role in (Role.OWNER, Role.STAFF)
+    )
+    if pour_le_salon:
         return
     window = timedelta(hours=salon.cancellation_window_h or settings.DEFAULT_CANCEL_WINDOW_H)
     if as_utc(booking.start) - utcnow() < window:

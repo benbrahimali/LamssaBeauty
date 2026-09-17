@@ -108,6 +108,30 @@ async def _assert_can_act(booking: Booking, user: User) -> Salon:
     return await assert_salon_access(booking.salon_id, user)
 
 
+def client_may_set(target: BookingStatus) -> bool:
+    """Ce qu'un client peut faire de son propre RDV : l'annuler, rien d'autre.
+
+    Le confirmer lui permettait de réserver sans payer un RDV en attente de
+    paiement en ligne ; le marquer « en cours » ou « absent » n'a pas de sens.
+    """
+    return target is BookingStatus.CANCELLED
+
+
+async def _acts_for_salon(booking: Booking, user: User) -> bool:
+    """Le gérant de ce salon ou un membre de son équipe.
+
+    Le rôle du compte ne suffit pas : un gérant qui réserve dans un autre salon
+    y est un client comme un autre.
+    """
+    salon = await get_salon(booking.salon_id)
+    if salon.owner_id == user.id:
+        return True
+    membre = await StaffMember.find_one(
+        StaffMember.salon_id == booking.salon_id, StaffMember.user_id == user.id
+    )
+    return membre is not None
+
+
 async def _pick_any_staff(
     salon: Salon, service_ids: list[PydanticObjectId], start
 ) -> StaffMember:
@@ -254,16 +278,17 @@ async def patch_status(
     """Applique la machine à états §5.5 ; `DONE` passe obligatoirement par /complete."""
     booking = await _load_booking(booking_id)
     salon = await _assert_can_act(booking, user)
+    pour_le_salon = await _acts_for_salon(booking, user)
 
     if body.status is BookingStatus.DONE:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "Utilisez POST /bookings/{id}/complete pour terminer une prestation",
         )
-    if body.status is BookingStatus.CANCELLED:
-        await assert_can_cancel(booking, salon, user)
-    if body.status in (BookingStatus.IN_PROGRESS, BookingStatus.NO_SHOW) and user.role is Role.CLIENT:
+    if not pour_le_salon and not client_may_set(body.status):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Réservé au salon")
+    if body.status is BookingStatus.CANCELLED:
+        await assert_can_cancel(booking, salon, user, for_salon=pour_le_salon)
 
     if body.status is BookingStatus.NO_SHOW and no_show_too_early(booking.start, utcnow()):
         raise HTTPException(
