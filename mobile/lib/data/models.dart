@@ -822,6 +822,9 @@ class Booking {
   /// Identifiants des prestations réservées.
   final List<String> serviceIds;
 
+  /// Téléphone du client — saisi pour un walk-in, celui du compte sinon.
+  final String clientPhone;
+
   const Booking({
     required this.id,
     this.clientName = '',
@@ -839,6 +842,7 @@ class Booking {
     this.paid = false,
     this.reviewed = false,
     this.serviceIds = const [],
+    this.clientPhone = '',
   });
 
   /// Seul un paiement en ligne encaissé est remboursable — le serveur refuse
@@ -882,6 +886,7 @@ class Booking {
       reviewed: json['reviewed'] == true,
       serviceIds: (json['service_ids'] as List?)?.map((e) => e.toString()).toList() ??
           const [],
+      clientPhone: json['client_phone']?.toString().trim() ?? '',
     );
   }
 }

@@ -21,6 +21,7 @@ import '../core/money.dart';
 import '../widgets/services_editor.dart';
 import '../core/booking_actions.dart';
 import '../widgets/booking_actions_menu.dart';
+import '../widgets/call_client_button.dart';
 
 /// Caisse du salon (§3.4) : encaissement, split par employé, clôture de journée.
 class CaisseScreen extends StatefulWidget {
@@ -720,7 +721,8 @@ class _CaisseScreenState extends State<CaisseScreen> {
                                 fontSize: 11, color: AppColors.sub)),
                       ]),
                 ),
-                const SizedBox(width: 8),
+                CallClientButton(phone: booking.clientPhone),
+                const SizedBox(width: 4),
                 if (canComplete)
                   GestureDetector(
                     onTap: () => _complete(booking),

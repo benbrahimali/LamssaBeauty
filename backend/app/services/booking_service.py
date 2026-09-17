@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 
 from beanie import PydanticObjectId
 from fastapi import HTTPException, status
+from fastapi.encoders import jsonable_encoder
 
 from app.core.config import settings
 from app.core.db import redis
@@ -377,3 +378,45 @@ async def assert_can_cancel(
             f"Annulation impossible à moins de {salon.cancellation_window_h} h du RDV — "
             "contactez le salon",
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Identité du client dans l'agenda du salon
+# ─────────────────────────────────────────────────────────────────────────────
+def attach_client_identity(
+    bookings: list[dict], accounts: dict[str, tuple[str, str]]
+) -> list[dict]:
+    """Complète nom et téléphone des RDV pris dans l'app, depuis le compte client.
+
+    Seuls les walk-in portaient un nom : un RDV réservé dans l'app s'affichait
+    « Client », et le salon ne savait pas qui venait ni qui appeler en cas de
+    retard. Ce qui a été saisi sur le RDV — walk-in — n'est jamais écrasé.
+    """
+    resultat = []
+    for b in bookings:
+        rdv = dict(b)
+        compte = accounts.get(str(rdv.get("client_id") or ""))
+        if compte:
+            nom, telephone = compte
+            if not (rdv.get("client_name") or "").strip():
+                rdv["client_name"] = nom
+            if not (rdv.get("client_phone") or "").strip():
+                rdv["client_phone"] = telephone
+        resultat.append(rdv)
+    return resultat
+
+
+async def bookings_with_clients(bookings: list[Booking]) -> list[dict]:
+    """Les RDV d'un agenda, avec le nom et le téléphone de leur client.
+
+    Lus à l'affichage plutôt que figés à la réservation : les RDV déjà pris
+    en profitent, et un client qui corrige son nom apparaît à jour.
+    """
+    ids = list({b.client_id for b in bookings if b.client_id})
+    comptes = (
+        {str(u.id): (u.name, u.phone) for u in await User.find({"_id": {"$in": ids}}).to_list()}
+        if ids
+        else {}
+    )
+    return attach_client_identity(jsonable_encoder(bookings), comptes)
+

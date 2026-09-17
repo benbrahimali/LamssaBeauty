@@ -14,6 +14,7 @@ import '../widgets/my_reviews.dart';
 import '../widgets/services_editor.dart';
 import '../core/booking_actions.dart';
 import '../widgets/booking_actions_menu.dart';
+import '../widgets/call_client_button.dart';
 
 /// Espace coiffeur : SON planning, SA caisse, SES tséb9as (§3.4).
 /// Aucune donnée du salon n'est visible ici — le backend le refuse d'ailleurs.
@@ -408,6 +409,7 @@ class _CoiffeurDashboardScreenState extends State<CoiffeurDashboardScreen> {
                       style: GoogleFonts.dmSans(fontSize: 12, color: AppColors.sub)),
                 ]),
               ),
+              CallClientButton(phone: booking.clientPhone),
               if (BookingActionsMenu.hasItems(actions))
                 BookingActionsMenu(
                   actions: actions,

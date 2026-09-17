@@ -41,6 +41,7 @@ from app.services.booking_service import (
     assert_can_cancel,
     available_slots,
     create_booking,
+    bookings_with_clients,
     resolve_services,
     total_duration,
     total_price,
@@ -258,7 +259,7 @@ async def salon_agenda(
         "revenue_expected": round(
             sum(b.price_total for b in bookings if b.status is not BookingStatus.CANCELLED), 2
         ),
-        "bookings": bookings,
+        "bookings": await bookings_with_clients(bookings),
     }
 
 

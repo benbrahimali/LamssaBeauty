@@ -18,7 +18,11 @@ from app.models.documents import (
 )
 from app.models.enums import ACTIVE_BOOKING_STATUSES, ReviewStatus
 from app.schemas.booking import SlotsResponse
-from app.services.booking_service import available_slots, day_availability
+from app.services.booking_service import (
+    available_slots,
+    bookings_with_clients,
+    day_availability,
+)
 
 router = APIRouter()
 
@@ -47,7 +51,7 @@ async def my_agenda(
         "date": str(target),
         "count": len(bookings),
         "upcoming": sum(1 for b in bookings if b.status in ACTIVE_BOOKING_STATUSES),
-        "bookings": bookings,
+        "bookings": await bookings_with_clients(bookings),
     }
 
 

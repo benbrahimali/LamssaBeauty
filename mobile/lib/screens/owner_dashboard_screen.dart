@@ -13,6 +13,7 @@ import '../widgets/verification_banner.dart';
 import 'create_salon_screen.dart';
 import 'manage_salon_screen.dart';
 import '../core/money.dart';
+import '../widgets/call_client_button.dart';
 
 /// Tableau de bord gérant : caisse du jour, agenda, équipe, tséb9as à valider.
 class OwnerDashboardScreen extends StatefulWidget {
@@ -536,6 +537,7 @@ class _BookingRow extends StatelessWidget {
                 style: GoogleFonts.dmSans(fontSize: 11, color: AppColors.sub)),
           ]),
         ),
+        CallClientButton(phone: booking.clientPhone),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(formatDt(booking.price),
               style: GoogleFonts.playfairDisplay(
